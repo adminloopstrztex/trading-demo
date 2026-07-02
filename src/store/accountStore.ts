@@ -33,8 +33,12 @@ interface AccountState {
     password: string
   ) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
-  buy: (symbol: string, quantity: number, price: number) => boolean;
-  sell: (symbol: string, quantity: number, price: number) => boolean;
+  trade: (
+    side: 'buy' | 'sell',
+    symbol: string,
+    quantity: number,
+    price: number
+  ) => Promise<{ ok: boolean; error?: string; executedPrice?: number }>;
 }
 
 function applySnapshot(user: AuthUser, snap: AccountSnapshot) {
@@ -46,22 +50,7 @@ function applySnapshot(user: AuthUser, snap: AccountSnapshot) {
   };
 }
 
-async function pushAccount(state: AccountState) {
-  try {
-    await api('/account', {
-      method: 'PUT',
-      body: {
-        virtualBalance: state.virtualBalance,
-        holdings: state.holdings,
-        transactions: state.transactions,
-      },
-    });
-  } catch {
-    // offline / token expired: keep local state, will re-sync next action
-  }
-}
-
-export const useAccountStore = create<AccountState>((set, get) => ({
+export const useAccountStore = create<AccountState>((set) => ({
   user: null,
   ready: false,
   virtualBalance: 0,
@@ -115,55 +104,22 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     set({ user: null, virtualBalance: 0, holdings: [], transactions: [] });
   },
 
-  buy: (symbol, quantity, price) => {
-    const cost = quantity * price;
-    const state = get();
-    if (cost > state.virtualBalance || quantity <= 0) return false;
-
-    const existing = state.holdings.find((h) => h.symbol === symbol);
-    let holdings: Holding[];
-    if (existing) {
-      const totalQty = existing.quantity + quantity;
-      const avgPrice = (existing.avgPrice * existing.quantity + price * quantity) / totalQty;
-      holdings = state.holdings.map((h) =>
-        h.symbol === symbol ? { ...h, quantity: totalQty, avgPrice } : h
+  trade: async (side, symbol, quantity, price) => {
+    if (!Number.isFinite(quantity) || quantity <= 0)
+      return { ok: false, error: 'Cantidad inválida' };
+    try {
+      const data = await api<{ account: AccountSnapshot; executedPrice: number }>(
+        '/account/trade',
+        { method: 'POST', body: { side, symbol, quantity, price } }
       );
-    } else {
-      holdings = [...state.holdings, { symbol, quantity, avgPrice: price }];
+      set({
+        virtualBalance: data.account.virtualBalance,
+        holdings: data.account.holdings,
+        transactions: data.account.transactions,
+      });
+      return { ok: true, executedPrice: data.executedPrice };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
     }
-
-    set({
-      virtualBalance: state.virtualBalance - cost,
-      holdings,
-      transactions: [
-        { id: crypto.randomUUID(), symbol, side: 'buy', quantity, price, timestamp: Date.now() },
-        ...state.transactions,
-      ],
-    });
-    pushAccount(get());
-    return true;
-  },
-
-  sell: (symbol, quantity, price) => {
-    const state = get();
-    const existing = state.holdings.find((h) => h.symbol === symbol);
-    if (!existing || existing.quantity < quantity || quantity <= 0) return false;
-
-    const remaining = existing.quantity - quantity;
-    const holdings =
-      remaining === 0
-        ? state.holdings.filter((h) => h.symbol !== symbol)
-        : state.holdings.map((h) => (h.symbol === symbol ? { ...h, quantity: remaining } : h));
-
-    set({
-      virtualBalance: state.virtualBalance + quantity * price,
-      holdings,
-      transactions: [
-        { id: crypto.randomUUID(), symbol, side: 'sell', quantity, price, timestamp: Date.now() },
-        ...state.transactions,
-      ],
-    });
-    pushAccount(get());
-    return true;
   },
 }));

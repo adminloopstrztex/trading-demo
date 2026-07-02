@@ -16,8 +16,7 @@ export default function InstrumentDetail() {
   const { symbol = '' } = useParams();
   const asset = useMarketStore((s) => s.assets[symbol]);
   const setLiveCandles = useMarketStore((s) => s.setLiveCandles);
-  const buy = useAccountStore((s) => s.buy);
-  const sell = useAccountStore((s) => s.sell);
+  const trade = useAccountStore((s) => s.trade);
   const balance = useAccountStore((s) => s.virtualBalance);
   const holdings = useAccountStore((s) => s.holdings);
   const [range, setRange] = useState('Todo');
@@ -25,6 +24,7 @@ export default function InstrumentDetail() {
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('100');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
 
   const isLive = asset?.source === 'live';
@@ -58,14 +58,21 @@ export default function InstrumentDetail() {
   const estimatedUnits = amountNum / asset.price;
   const maxSellAmount = position ? position.quantity * asset.price : 0;
 
-  function handleConfirm() {
-    if (mode === 'buy') {
-      const ok = buy(symbol, estimatedUnits, asset.price);
-      setFeedback(ok ? `Compraste $${amountNum.toFixed(2)} de ${symbol}.` : 'Saldo insuficiente.');
+  async function handleConfirm() {
+    if (submitting) return;
+    const units = amountNum / asset.price;
+    if (!(units > 0)) {
+      setFeedback('Ingresa un monto válido.');
+      return;
+    }
+    setSubmitting(true);
+    const result = await trade(mode, symbol, units, asset.price);
+    setSubmitting(false);
+    if (result.ok) {
+      const verb = mode === 'buy' ? 'Compraste' : 'Vendiste';
+      setFeedback(`${verb} $${amountNum.toFixed(2)} de ${symbol}.`);
     } else {
-      const units = amountNum / asset.price;
-      const ok = sell(symbol, units, asset.price);
-      setFeedback(ok ? `Vendiste $${amountNum.toFixed(2)} de ${symbol}.` : 'No tienes suficiente posición.');
+      setFeedback(result.error || 'No se pudo completar la operación.');
     }
   }
 
@@ -221,11 +228,12 @@ export default function InstrumentDetail() {
             </div>
             <button
               onClick={handleConfirm}
-              className={`rounded-xl py-2.5 text-sm font-semibold text-[#0A0B0D] ${
+              disabled={submitting}
+              className={`rounded-xl py-2.5 text-sm font-semibold text-[#0A0B0D] disabled:opacity-60 ${
                 mode === 'buy' ? 'bg-[#16C784] hover:bg-[#13B374]' : 'bg-[#FF5C5C] hover:bg-[#E84C4C]'
               }`}
             >
-              {mode === 'buy' ? 'Comprar' : 'Vender'} {symbol}
+              {submitting ? 'Procesando…' : `${mode === 'buy' ? 'Comprar' : 'Vender'} ${symbol}`}
             </button>
           </div>
 
