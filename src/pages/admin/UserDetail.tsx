@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api';
 import type { CrmUserDetail, CrmUser, Note } from './types';
-import { KycBadge, StatusBadge, timeAgo } from './ui';
+import { Avatar, KycBadge, StatusBadge, Skeleton, timeAgo } from './ui';
 
 export default function AdminUserDetail() {
   const { id = '' } = useParams();
@@ -39,7 +39,28 @@ export default function AdminUserDetail() {
   }
 
   if (error) return <p className="text-[#FF5C5C] text-sm">{error}</p>;
-  if (!u) return <p className="text-[#8B92A0] text-sm">Cargando…</p>;
+  if (!u)
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <div className="flex items-center gap-4">
+          <Skeleton className="w-14 h-14 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[76px] rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
+          <Skeleton className="h-64 rounded-2xl" />
+          <Skeleton className="h-64 rounded-2xl" />
+        </div>
+      </div>
+    );
 
   const equity = u.virtualBalance + u.invested;
   const money = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -51,9 +72,7 @@ export default function AdminUserDetail() {
       </Link>
 
       <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded-full bg-[#1E2128] flex items-center justify-center text-lg font-semibold text-[#B8BFCC]">
-          {u.name.slice(0, 1)}
-        </div>
+        <Avatar name={u.name} size={56} />
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold text-[#F2F3F5]">{u.name}</h1>

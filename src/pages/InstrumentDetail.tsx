@@ -12,17 +12,30 @@ const RANGES = [
   { key: 'Todo', count: 90, days: 30 },
 ];
 
+function triggerHint(
+  type: 'limit' | 'stop',
+  side: 'buy' | 'sell',
+  target: number,
+  dec: number
+): string {
+  const up = (type === 'limit' && side === 'sell') || (type === 'stop' && side === 'buy');
+  return `${up ? 'suba' : 'baje'} a $${target.toFixed(dec)} o ${up ? 'más' : 'menos'}`;
+}
+
 export default function InstrumentDetail() {
   const { symbol = '' } = useParams();
   const asset = useMarketStore((s) => s.assets[symbol]);
   const setLiveCandles = useMarketStore((s) => s.setLiveCandles);
   const trade = useAccountStore((s) => s.trade);
+  const createOrder = useAccountStore((s) => s.createOrder);
   const balance = useAccountStore((s) => s.virtualBalance);
   const holdings = useAccountStore((s) => s.holdings);
   const [range, setRange] = useState('Todo');
   const [chartType, setChartType] = useState<'candles' | 'area'>('candles');
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
+  const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop'>('market');
   const [amount, setAmount] = useState('100');
+  const [target, setTarget] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -55,24 +68,42 @@ export default function InstrumentDetail() {
 
   const position = holdings.find((h) => h.symbol === symbol);
   const amountNum = Number(amount) || 0;
-  const estimatedUnits = amountNum / asset.price;
   const maxSellAmount = position ? position.quantity * asset.price : 0;
+
+  const targetNum = Number(target) || 0;
+  // For limit/stop, size the order by the target price (that's the fill price).
+  const orderPrice = orderType === 'market' ? asset.price : targetNum;
+  const orderUnits = orderPrice > 0 ? amountNum / orderPrice : 0;
 
   async function handleConfirm() {
     if (submitting) return;
-    const units = amountNum / asset.price;
-    if (!(units > 0)) {
+    if (!(amountNum > 0)) {
       setFeedback('Ingresa un monto válido.');
       return;
     }
+    if (orderType !== 'market' && !(targetNum > 0)) {
+      setFeedback('Ingresa un precio objetivo válido.');
+      return;
+    }
     setSubmitting(true);
-    const result = await trade(mode, symbol, units, asset.price);
-    setSubmitting(false);
-    if (result.ok) {
-      const verb = mode === 'buy' ? 'Compraste' : 'Vendiste';
-      setFeedback(`${verb} $${amountNum.toFixed(2)} de ${symbol}.`);
+    if (orderType === 'market') {
+      const result = await trade(mode, symbol, amountNum / asset.price, asset.price);
+      setSubmitting(false);
+      setFeedback(
+        result.ok
+          ? `${mode === 'buy' ? 'Compraste' : 'Vendiste'} $${amountNum.toFixed(2)} de ${symbol}.`
+          : result.error || 'No se pudo completar la operación.'
+      );
     } else {
-      setFeedback(result.error || 'No se pudo completar la operación.');
+      const result = await createOrder(orderType, mode, symbol, orderUnits, targetNum);
+      setSubmitting(false);
+      if (result.ok) {
+        const label = orderType === 'limit' ? 'límite' : 'stop';
+        setFeedback(`Orden ${label} de ${mode === 'buy' ? 'compra' : 'venta'} creada en ${targetNum}.`);
+        setTarget('');
+      } else {
+        setFeedback(result.error || 'No se pudo crear la orden.');
+      }
     }
   }
 
@@ -207,34 +238,79 @@ export default function InstrumentDetail() {
             </button>
           </div>
 
-          <div className="grid grid-cols-[1fr_220px] gap-4 items-end">
-            <div>
-              <label className="block text-xs text-[#8B92A0] mb-1">Monto en USD</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B92A0]">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full rounded-xl border border-[#1E2128] bg-[#0A0B0D] text-[#F2F3F5] pl-7 pr-3 py-2.5 text-sm focus:outline-none focus:border-[#16C784]"
-                />
-              </div>
-              <div className="text-xs text-[#8B92A0] mt-1">
-                ≈ {estimatedUnits.toFixed(4)} unidades · Efectivo: ${balance.toFixed(2)}
-                {mode === 'sell' && ` · Posición: $${maxSellAmount.toFixed(2)}`}
-              </div>
+          <div className="space-y-3">
+            <div className="flex gap-1 bg-[#1A1D23] rounded-lg p-0.5 w-fit" role="group" aria-label="Tipo de orden">
+              {(['market', 'limit', 'stop'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setOrderType(t)}
+                  aria-pressed={orderType === t}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    orderType === t ? 'bg-[#262A33] text-[#F2F3F5]' : 'text-[#8B92A0] hover:text-[#F2F3F5]'
+                  }`}
+                >
+                  {t === 'market' ? 'Mercado' : t === 'limit' ? 'Límite' : 'Stop'}
+                </button>
+              ))}
             </div>
-            <button
-              onClick={handleConfirm}
-              disabled={submitting}
-              className={`rounded-xl py-2.5 text-sm font-semibold text-[#0A0B0D] disabled:opacity-60 ${
-                mode === 'buy' ? 'bg-[#16C784] hover:bg-[#13B374]' : 'bg-[#FF5C5C] hover:bg-[#E84C4C]'
-              }`}
-            >
-              {submitting ? 'Procesando…' : `${mode === 'buy' ? 'Comprar' : 'Vender'} ${symbol}`}
-            </button>
+
+            <div className={`grid gap-3 items-end ${orderType === 'market' ? 'sm:grid-cols-[1fr_auto]' : 'sm:grid-cols-[1fr_1fr_auto]'}`}>
+              <div>
+                <label className="block text-xs text-[#8B92A0] mb-1">Monto en USD</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B92A0]">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    aria-label="Monto en USD"
+                    className="w-full rounded-xl border border-[#1E2128] bg-[#0A0B0D] text-[#F2F3F5] pl-7 pr-3 py-2.5 text-sm focus:outline-none focus:border-[#16C784]"
+                  />
+                </div>
+              </div>
+
+              {orderType !== 'market' && (
+                <div>
+                  <label className="block text-xs text-[#8B92A0] mb-1">Precio objetivo</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    placeholder={asset.price.toFixed(decimals)}
+                    aria-label="Precio objetivo"
+                    className="w-full rounded-xl border border-[#1E2128] bg-[#0A0B0D] text-[#F2F3F5] px-3 py-2.5 text-sm focus:outline-none focus:border-[#16C784]"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={handleConfirm}
+                disabled={submitting}
+                className={`rounded-xl py-2.5 px-4 text-sm font-semibold text-[#0A0B0D] disabled:opacity-60 ${
+                  mode === 'buy' ? 'bg-[#16C784] hover:bg-[#13B374]' : 'bg-[#FF5C5C] hover:bg-[#E84C4C]'
+                }`}
+              >
+                {submitting
+                  ? 'Procesando…'
+                  : orderType === 'market'
+                    ? `${mode === 'buy' ? 'Comprar' : 'Vender'} ${symbol}`
+                    : 'Crear orden'}
+              </button>
+            </div>
+
+            <div className="text-xs text-[#8B92A0]">
+              ≈ {orderUnits.toFixed(4)} unidades · Efectivo: ${balance.toFixed(2)}
+              {mode === 'sell' && ` · Posición: $${maxSellAmount.toFixed(2)}`}
+              {orderType !== 'market' && targetNum > 0 && (
+                <span className="block mt-0.5 text-[#5B6472]">
+                  Se ejecutará cuando el precio {triggerHint(orderType, mode, targetNum, decimals)}.
+                </span>
+              )}
+            </div>
           </div>
 
           {feedback && <p className="text-xs text-[#8B92A0] mt-3 text-center">{feedback}</p>}

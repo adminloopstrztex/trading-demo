@@ -12,6 +12,7 @@ export interface Metrics {
   totalTrades: number;
   totalVolume: number;
   totalEquity: number;
+  deltas: { users: number; trades: number; volume: number };
 }
 
 export interface CrmUser {
@@ -24,9 +25,23 @@ export interface CrmUser {
   lastActiveAt: number;
   virtualBalance: number;
   invested: number;
+  volume: number;
   holdingsCount: number;
   tradesCount: number;
   tags: string[];
+}
+
+export interface AssetVolume {
+  symbol: string;
+  volume: number;
+  trades: number;
+}
+
+export interface PagedUsers {
+  items: CrmUser[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface Note {

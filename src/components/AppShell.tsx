@@ -2,11 +2,13 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAccountStore } from '../store/accountStore';
 import { useMarketTicker } from '../hooks/useMarketTicker';
 import { useCryptoFeed } from '../hooks/useCryptoFeed';
+import { useOrderWatcher } from '../hooks/useOrderWatcher';
 import Sidebar from './Sidebar';
 
 export default function AppShell() {
   useMarketTicker(1200);
   useCryptoFeed(20000);
+  useOrderWatcher();
   const user = useAccountStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
 

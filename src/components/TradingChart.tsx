@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   createChart,
   type IChartApi,
@@ -26,7 +26,7 @@ type Drawing =
   | { id: string; type: 'horizontal'; price: number }
   | { id: string; type: 'vertical'; time: number };
 
-const TOOLS: { key: Tool; title: string; path: JSX.Element }[] = [
+const TOOLS: { key: Tool; title: string; path: ReactNode }[] = [
   {
     key: 'cursor',
     title: 'Seleccionar / mover',

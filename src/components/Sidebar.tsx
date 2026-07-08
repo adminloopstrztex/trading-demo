@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import Logo from './Logo';
 import { useAccountStore } from '../store/accountStore';
 
-const ICONS: Record<string, JSX.Element> = {
+const ICONS: Record<string, ReactNode> = {
   portfolio: (
     <path
       d="M4 14L9 9L13 12L20 5"

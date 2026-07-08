@@ -31,6 +31,16 @@ export interface Transaction {
   timestamp: number;
 }
 
+export interface PendingOrder {
+  id: string;
+  symbol: string;
+  side: 'buy' | 'sell';
+  type: 'limit' | 'stop';
+  quantity: number;
+  targetPrice: number;
+  createdAt: number;
+}
+
 export interface User {
   email: string;
   name: string;
