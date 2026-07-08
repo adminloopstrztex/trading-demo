@@ -6,9 +6,16 @@ import { seedData } from './seed.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, 'db.json');
 
+// In-memory mode (for tests): seed fresh in RAM, never touch the file.
+const MEMORY = process.env.SIMTRADE_MEMORY === '1';
+
 let db = { users: [] };
 
 export function load() {
+  if (MEMORY) {
+    db = seedData();
+    return db;
+  }
   if (existsSync(DB_PATH)) {
     try {
       db = JSON.parse(readFileSync(DB_PATH, 'utf-8'));
@@ -24,6 +31,7 @@ export function load() {
 }
 
 export function persist() {
+  if (MEMORY) return;
   writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
