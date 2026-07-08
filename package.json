@@ -7,6 +7,7 @@
     "dev": "concurrently -k -n api,web -c blue,green \"npm:server\" \"npm:web\"",
     "server": "node server/index.js",
     "web": "vite",
+    "test": "vitest run",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
@@ -33,8 +34,10 @@
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^10.0.3",
     "oxlint": "^1.69.0",
+    "supertest": "^7.2.2",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "vitest": "^4.1.10"
   }
 }
