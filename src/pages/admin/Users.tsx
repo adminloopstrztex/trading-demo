@@ -1,10 +1,96 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
-import type { PagedUsers } from './types';
-import { Avatar, KycBadge, StatusBadge, Skeleton, EmptyState, fmtMoney, timeAgo } from './ui';
+import type { CrmUser, PagedUsers } from './types';
+import { Avatar, KycBadge, StatusBadge, Skeleton, EmptyState } from './ui';
+import { fmtMoney, timeAgo } from './format';
+import { GOAL_ORDER, GOAL_LABELS, EXPERIENCE_LEVELS } from './survey';
 
-const PAGE_SIZE = 8;
+type ColKey = 'status' | 'kyc' | 'equity' | 'invested' | 'trades' | 'created' | 'lastActive';
+
+interface Column {
+  key: ColKey;
+  label: string;
+  width: string;
+  align?: 'right';
+  render: (u: CrmUser) => React.ReactNode;
+}
+
+const COLUMNS: Column[] = [
+  { key: 'status', label: 'Estado', width: '118px', render: (u) => <StatusBadge status={u.status} /> },
+  { key: 'kyc', label: 'KYC', width: '128px', render: (u) => <KycBadge kyc={u.kycStatus} /> },
+  {
+    key: 'equity',
+    label: 'Equity',
+    width: '116px',
+    align: 'right',
+    render: (u) => <span className="tabular-nums text-[#F2F3F5]">{fmtMoney(u.virtualBalance + u.invested)}</span>,
+  },
+  {
+    key: 'invested',
+    label: 'Invertido',
+    width: '116px',
+    align: 'right',
+    render: (u) => <span className="tabular-nums text-[#B8BFCC]">{fmtMoney(u.invested)}</span>,
+  },
+  {
+    key: 'trades',
+    label: 'Operaciones',
+    width: '108px',
+    align: 'right',
+    render: (u) => <span className="tabular-nums text-[#B8BFCC]">{u.tradesCount}</span>,
+  },
+  {
+    key: 'created',
+    label: 'Registrado',
+    width: '128px',
+    align: 'right',
+    render: (u) => <span className="text-[#8B92A0]">{timeAgo(u.createdAt)}</span>,
+  },
+  {
+    key: 'lastActive',
+    label: 'Última act.',
+    width: '116px',
+    align: 'right',
+    render: (u) => <span className="text-[#8B92A0]">{timeAgo(u.lastActiveAt)}</span>,
+  },
+];
+
+const DEFAULT_VISIBLE: ColKey[] = ['status', 'kyc', 'equity', 'trades', 'lastActive'];
+const PAGE_SIZES = [10, 25, 50];
+
+function csvCell(v: unknown) {
+  return `"${String(v).replace(/"/g, '""')}"`;
+}
+function downloadCsv(rows: CrmUser[]) {
+  const head = ['ID', 'Nombre', 'Email', 'Estado', 'KYC', 'Equity', 'Invertido', 'Operaciones', 'Registrado', 'Última actividad'];
+  const lines = [head.map(csvCell).join(',')];
+  for (const u of rows) {
+    lines.push(
+      [
+        u.id,
+        u.name,
+        u.email,
+        u.status,
+        u.kycStatus,
+        (u.virtualBalance + u.invested).toFixed(2),
+        u.invested.toFixed(2),
+        u.tradesCount,
+        new Date(u.createdAt).toISOString(),
+        new Date(u.lastActiveAt).toISOString(),
+      ]
+        .map(csvCell)
+        .join(',')
+    );
+  }
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `usuarios-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function AdminUsers() {
   const [data, setData] = useState<PagedUsers | null>(null);
@@ -12,144 +98,373 @@ export default function AdminUsers() {
   const [status, setStatus] = useState('');
   const [kyc, setKyc] = useState('');
   const [segment, setSegment] = useState('');
+  const [experience, setExperience] = useState('');
+  const [goal, setGoal] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [visible, setVisible] = useState<Set<ColKey>>(new Set(DEFAULT_VISIBLE));
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dense, setDense] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // reset to page 1 whenever a filter changes
-  useEffect(() => {
-    setPage(1);
-  }, [q, status, kyc, segment]);
+  useEffect(() => setPage(1), [q, status, kyc, segment, experience, goal, pageSize]);
+
+  function buildParams(extra?: Record<string, string>) {
+    const p = new URLSearchParams();
+    if (q) p.set('q', q);
+    if (status) p.set('status', status);
+    if (kyc) p.set('kyc', kyc);
+    if (segment) p.set('segment', segment);
+    if (experience) p.set('experience', experience);
+    if (goal) p.set('goal', goal);
+    for (const k in extra) p.set(k, extra[k]);
+    return p;
+  }
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (status) params.set('status', status);
-    if (kyc) params.set('kyc', kyc);
-    if (segment) params.set('segment', segment);
-    params.set('page', String(page));
-    params.set('pageSize', String(PAGE_SIZE));
+    const p = buildParams({ page: String(page), pageSize: String(pageSize) });
     setData(null);
     const t = setTimeout(() => {
-      api<PagedUsers>(`/admin/users?${params.toString()}`)
+      api<PagedUsers>(`/admin/users?${p.toString()}`)
         .then(setData)
-        .catch(() => setData({ items: [], total: 0, page: 1, pageSize: PAGE_SIZE }));
+        .catch(() => setData({ items: [], total: 0, page: 1, pageSize }));
     }, 200);
     return () => clearTimeout(t);
-  }, [q, status, kyc, segment, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, status, kyc, segment, experience, goal, page, pageSize, reloadKey]);
 
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageItems = data?.items ?? [];
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const rows = data?.items ?? [];
   const loading = data === null;
+  const cols = COLUMNS.filter((c) => visible.has(c.key));
+  const gridCols = `36px minmax(200px,2fr) ${cols.map((c) => c.width).join(' ')}`;
+
+  const pageIds = rows.map((r) => r.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  function toggleAllOnPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function fetchAllFiltered(): Promise<CrmUser[]> {
+    const out: CrmUser[] = [];
+    let pg = 1;
+    for (;;) {
+      const p = buildParams({ page: String(pg), pageSize: '100' });
+      const res = await api<PagedUsers>(`/admin/users?${p.toString()}`);
+      out.push(...res.items);
+      if (out.length >= res.total || res.items.length === 0) break;
+      pg++;
+    }
+    return out;
+  }
+
+  async function exportAll() {
+    setBusy(true);
+    try {
+      downloadCsv(await fetchAllFiltered());
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function exportSelection() {
+    setBusy(true);
+    try {
+      const all = await fetchAllFiltered();
+      downloadCsv(all.filter((u) => selected.has(u.id)));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function bulkStatus(newStatus: 'active' | 'suspended') {
+    setBusy(true);
+    try {
+      await Promise.all([...selected].map((id) => api(`/admin/users/${id}`, { method: 'PATCH', body: { status: newStatus } })));
+      setSelected(new Set());
+      setReloadKey((k) => k + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="text-xl font-semibold text-[#F2F3F5]">Usuarios</h1>
-        <p className="text-sm text-[#8B92A0]">{loading ? 'Cargando…' : `${total} resultados`}</p>
+    <div className="space-y-4">
+      <header className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-[#F2F3F5]">Usuarios</h1>
+          <p className="text-sm text-[#8B92A0]">{loading ? 'Cargando…' : `${total} resultados`}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDense((d) => !d)}
+            aria-pressed={dense}
+            className={`text-xs font-medium rounded-lg border px-3 py-1.5 transition-colors ${
+              dense ? 'bg-[#1E2128] border-[#262A33] text-[#F2F3F5]' : 'border-[#262A33] text-[#8B92A0] hover:text-[#F2F3F5]'
+            }`}
+          >
+            Vista sencilla
+          </button>
+          <ColumnMenu visible={visible} setVisible={setVisible} />
+          <button
+            onClick={exportAll}
+            disabled={busy || total === 0}
+            className="text-xs font-medium rounded-lg border border-[#262A33] text-[#8B92A0] hover:text-[#F2F3F5] px-3 py-1.5 disabled:opacity-40"
+          >
+            Exportar CSV
+          </button>
+        </div>
       </header>
 
+      {/* Top filters (segment sits above the grid; per-column filters live in the header row) */}
       <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[220px]">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5B6472] pointer-events-none">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-              <path d="M21 21l-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </span>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            aria-label="Buscar usuarios por nombre o email"
-            placeholder="Buscar por nombre o email…"
-            className="w-full rounded-xl border border-[#1E2128] bg-[#101216] pl-9 pr-4 py-2 text-sm text-[#F2F3F5] placeholder:text-[#5B6472] outline-none focus-visible:border-[#3B82F6] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/30"
-          />
-        </div>
         <Select label="Segmento" value={segment} onChange={setSegment} options={[['', 'Segmento: todos'], ['active', 'Han operado'], ['lead', 'Leads']]} />
-        <Select label="Estado" value={status} onChange={setStatus} options={[['', 'Estado: todos'], ['active', 'Activos'], ['suspended', 'Suspendidos']]} />
-        <Select label="KYC" value={kyc} onChange={setKyc} options={[['', 'KYC: todos'], ['verified', 'Verificados'], ['pending', 'Pendientes'], ['none', 'Sin verificar']]} />
+        <Select
+          label="Nivel de experiencia"
+          value={experience}
+          onChange={setExperience}
+          options={[['', 'Experiencia: toda'], ...EXPERIENCE_LEVELS.map((l) => [l.key, l.label] as [string, string])]}
+        />
+        <Select
+          label="Objetivo de onboarding"
+          value={goal}
+          onChange={setGoal}
+          options={[['', 'Objetivo: todos'], ...GOAL_ORDER.map((g) => [g, GOAL_LABELS[g]] as [string, string])]}
+        />
       </div>
 
-      <div className="bg-[#101216] border border-[#1E2128] rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-3 px-5 py-3 text-[11px] uppercase tracking-wide text-[#5B6472] border-b border-[#1E2128]">
-          <span>Usuario</span>
-          <span>Estado</span>
-          <span>KYC</span>
-          <span className="text-right">Equity</span>
-          <span className="text-right">Última act.</span>
-        </div>
-
-        {loading ? (
-          Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-3 px-5 py-3.5 items-center border-b border-[#1A1D23] last:border-0">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-8 h-8 rounded-full" />
-                <div className="space-y-1.5">
-                  <Skeleton className="h-3 w-28" />
-                  <Skeleton className="h-2.5 w-40" />
-                </div>
-              </div>
-              <Skeleton className="h-5 w-20 rounded-md" />
-              <Skeleton className="h-5 w-24 rounded-md" />
-              <Skeleton className="h-3 w-14 ml-auto" />
-              <Skeleton className="h-3 w-12 ml-auto" />
-            </div>
-          ))
-        ) : total === 0 ? (
-          <EmptyState
-            icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-                <path d="M21 21l-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            }
-            title="Sin resultados"
-            hint="Prueba con otro término de búsqueda o quita los filtros activos."
-          />
-        ) : (
-          pageItems.map((u) => {
-            const equity = u.virtualBalance + u.invested;
-            return (
-              <Link
-                key={u.id}
-                to={`/admin/users/${u.id}`}
-                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-3 px-5 py-3.5 items-center border-b border-[#1A1D23] last:border-0 hover:bg-white/[0.03] transition-colors outline-none focus-visible:bg-white/[0.04] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#3B82F6]/50"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar name={u.name} size={34} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-[#F2F3F5] truncate">{u.name}</div>
-                    <div className="text-xs text-[#8B92A0] truncate">{u.email}</div>
-                  </div>
-                </div>
-                <StatusBadge status={u.status} />
-                <KycBadge kyc={u.kycStatus} />
-                <span className="text-sm text-[#F2F3F5] text-right tabular-nums">{fmtMoney(equity)}</span>
-                <span className="text-xs text-[#8B92A0] text-right">{timeAgo(u.lastActiveAt)}</span>
-              </Link>
-            );
-          })
-        )}
-
-        {!loading && total > PAGE_SIZE && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-[#1E2128] text-xs text-[#8B92A0]">
-            <span>
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} de {total}
-            </span>
-            <div className="flex items-center gap-1">
-              <PageBtn disabled={page === 1} onClick={() => setPage((p) => p - 1)} label="Página anterior">
-                ‹
-              </PageBtn>
-              <span className="px-2 tabular-nums">
-                {page} / {pageCount}
-              </span>
-              <PageBtn disabled={page === pageCount} onClick={() => setPage((p) => p + 1)} label="Página siguiente">
-                ›
-              </PageBtn>
-            </div>
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-[#12213A] border border-[#274372] rounded-xl px-4 py-2.5 text-sm">
+          <span className="text-[#93c0f8] font-medium">{selected.size} seleccionados</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <BulkBtn onClick={() => bulkStatus('active')} disabled={busy}>
+              Activar
+            </BulkBtn>
+            <BulkBtn onClick={() => bulkStatus('suspended')} disabled={busy}>
+              Suspender
+            </BulkBtn>
+            <BulkBtn onClick={exportSelection} disabled={busy}>
+              Exportar
+            </BulkBtn>
+            <button onClick={() => setSelected(new Set())} className="text-xs text-[#8B92A0] hover:text-[#F2F3F5] px-2">
+              Limpiar
+            </button>
           </div>
-        )}
+        </div>
+      )}
+
+      <div className="bg-[#101216] border border-[#1E2128] rounded-2xl overflow-x-auto">
+        <div className="min-w-[720px]">
+          {/* header */}
+          <div
+            className="grid gap-3 px-4 py-2.5 text-[11px] uppercase tracking-wide text-[#5B6472] border-b border-[#1E2128] items-center"
+            style={{ gridTemplateColumns: gridCols }}
+          >
+            <input
+              type="checkbox"
+              checked={allOnPageSelected}
+              onChange={toggleAllOnPage}
+              aria-label="Seleccionar todos en esta página"
+              className="w-4 h-4 accent-[#3B82F6]"
+            />
+            <span>Usuario</span>
+            {cols.map((c) => (
+              <span key={c.key} className={c.align === 'right' ? 'text-right' : ''}>
+                {c.label}
+              </span>
+            ))}
+          </div>
+
+          {/* inline per-column filter row */}
+          <div
+            className="grid gap-3 px-4 py-2 border-b border-[#1A1D23] items-center"
+            style={{ gridTemplateColumns: gridCols }}
+          >
+            <span />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Filtrar nombre / email…"
+              aria-label="Filtrar por nombre o email"
+              className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-2.5 py-1.5 text-xs text-[#F2F3F5] placeholder:text-[#5B6472] outline-none focus-visible:border-[#3B82F6]"
+            />
+            {cols.map((c) => (
+              <div key={c.key} className={c.align === 'right' ? 'flex justify-end' : ''}>
+                {c.key === 'status' ? (
+                  <FilterSelect value={status} onChange={setStatus} options={[['', 'Todos'], ['active', 'Activos'], ['suspended', 'Suspend.']]} label="Filtrar estado" />
+                ) : c.key === 'kyc' ? (
+                  <FilterSelect value={kyc} onChange={setKyc} options={[['', 'Todos'], ['verified', 'Verif.'], ['pending', 'Pend.'], ['none', 'Sin verif.']]} label="Filtrar KYC" />
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {/* rows */}
+          {loading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="grid gap-3 px-4 items-center border-b border-[#1A1D23] last:border-0" style={{ gridTemplateColumns: gridCols, paddingBlock: dense ? 8 : 14 }}>
+                <Skeleton className="w-4 h-4 rounded" />
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-8 h-8 rounded-full" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                {cols.map((c) => (
+                  <Skeleton key={c.key} className="h-3.5 w-16" />
+                ))}
+              </div>
+            ))
+          ) : total === 0 ? (
+            <EmptyState
+              title="Sin resultados"
+              hint="Prueba con otro término de búsqueda o quita los filtros activos."
+            />
+          ) : (
+            rows.map((u) => {
+              const isSel = selected.has(u.id);
+              return (
+                <div
+                  key={u.id}
+                  className={`grid gap-3 px-4 items-center border-b border-[#1A1D23] last:border-0 transition-colors ${
+                    isSel ? 'bg-[#3B82F6]/[0.06]' : 'hover:bg-white/[0.03]'
+                  }`}
+                  style={{ gridTemplateColumns: gridCols, paddingBlock: dense ? 8 : 14 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSel}
+                    onChange={() => toggleOne(u.id)}
+                    aria-label={`Seleccionar ${u.name}`}
+                    className="w-4 h-4 accent-[#3B82F6]"
+                  />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar name={u.name} size={dense ? 26 : 34} />
+                    <div className="min-w-0">
+                      <Link
+                        to={`/admin/users/${u.id}`}
+                        className="text-sm font-medium text-[#F2F3F5] truncate block hover:text-[#60A5FA] outline-none focus-visible:text-[#60A5FA]"
+                      >
+                        {u.name}
+                      </Link>
+                      {!dense && <div className="text-xs text-[#8B92A0] truncate">{u.email}</div>}
+                    </div>
+                  </div>
+                  {cols.map((c) => (
+                    <div key={c.key} className={`text-sm ${c.align === 'right' ? 'text-right' : ''}`}>
+                      {c.render(u)}
+                    </div>
+                  ))}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
+      {/* footer: page size + pagination */}
+      {!loading && total > 0 && (
+        <div className="flex items-center justify-between gap-4 text-xs text-[#8B92A0] flex-wrap">
+          <div className="flex items-center gap-2">
+            <span>Mostrar</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              aria-label="Filas por página"
+              className="rounded-lg border border-[#1E2128] bg-[#101216] px-2 py-1 text-[#B8BFCC] outline-none focus-visible:border-[#3B82F6]"
+            >
+              {PAGE_SIZES.map((s) => (
+                <option key={s} value={s} className="bg-[#101216]">
+                  {s}
+                </option>
+              ))}
+            </select>
+            <span>
+              · {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} de {total}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <PageBtn disabled={page === 1} onClick={() => setPage((p) => p - 1)} label="Página anterior">
+              ‹
+            </PageBtn>
+            <span className="px-2 tabular-nums">
+              {page} / {pageCount}
+            </span>
+            <PageBtn disabled={page === pageCount} onClick={() => setPage((p) => p + 1)} label="Página siguiente">
+              ›
+            </PageBtn>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ColumnMenu({ visible, setVisible }: { visible: Set<ColKey>; setVisible: (s: Set<ColKey>) => void }) {
+  return (
+    <details className="relative">
+      <summary className="list-none cursor-pointer text-xs font-medium rounded-lg border border-[#262A33] text-[#8B92A0] hover:text-[#F2F3F5] px-3 py-1.5 [&::-webkit-details-marker]:hidden">
+        Columnas
+      </summary>
+      <div className="absolute right-0 mt-1 z-20 bg-[#16181C] border border-[#262A33] rounded-xl p-1.5 w-48 shadow-lg">
+        {COLUMNS.map((c) => (
+          <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 text-sm text-[#B8BFCC] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visible.has(c.key)}
+              onChange={() => {
+                const next = new Set(visible);
+                if (next.has(c.key)) next.delete(c.key);
+                else next.add(c.key);
+                setVisible(next);
+              }}
+              className="w-4 h-4 accent-[#3B82F6]"
+            />
+            {c.label}
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: [string, string][];
+  label: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
+      className="rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-2 py-1.5 text-xs text-[#B8BFCC] outline-none focus-visible:border-[#3B82F6]"
+    >
+      {options.map(([val, l]) => (
+        <option key={val} value={val} className="bg-[#101216]">
+          {l}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -177,6 +492,18 @@ function Select({
         </option>
       ))}
     </select>
+  );
+}
+
+function BulkBtn({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="text-xs font-medium rounded-lg border border-[#274372] bg-[#0A0B0D]/40 text-[#B8BFCC] hover:text-[#F2F3F5] hover:border-[#3B82F6] px-2.5 py-1 disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }
 

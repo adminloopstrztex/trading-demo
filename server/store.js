@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, 'db.json');
 
 // In-memory mode (for tests): seed fresh in RAM, never touch the file.
-const MEMORY = process.env.SIMTRADE_MEMORY === '1';
+const MEMORY = process.env.STRATEX_MEMORY === '1';
 
 let db = { users: [] };
 

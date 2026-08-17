@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'simtrade-token';
+const TOKEN_KEY = 'stratex-token';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

@@ -1,5 +1,13 @@
 import type { Holding, Transaction } from '../../types';
 
+export interface SurveyStats {
+  responded: number;
+  avgExperience: number;
+  avgTech: number;
+  experience: { beginner: number; intermediate: number; advanced: number };
+  goals: Record<string, number>;
+}
+
 export interface Metrics {
   totalUsers: number;
   newToday: number;
@@ -13,12 +21,20 @@ export interface Metrics {
   totalVolume: number;
   totalEquity: number;
   deltas: { users: number; trades: number; volume: number };
+  survey: SurveyStats;
+}
+
+export interface OnboardingSurvey {
+  tradingExperience: number | null;
+  techComfort: number | null;
+  goal: string | null;
 }
 
 export interface CrmUser {
   id: string;
   name: string;
   email: string;
+  phone: string;
   status: 'active' | 'suspended';
   kycStatus: 'none' | 'pending' | 'verified';
   createdAt: number;
@@ -29,6 +45,7 @@ export interface CrmUser {
   holdingsCount: number;
   tradesCount: number;
   tags: string[];
+  survey: OnboardingSurvey | null;
 }
 
 export interface AssetVolume {

@@ -13,7 +13,7 @@ Dos perfiles sobre la misma plataforma:
 
 ## Product Purpose
 
-SimTrade es un **simulador de trading educativo** (proyecto universitario, sin fines de lucro y sin dinero real) con dos superficies: la app de inversión para el usuario final y un CRM/panel de administración para gestionar la operación. El éxito se mide por: flujo de trading creíble y fluido, y un back-office que permita entender y gestionar a miles de usuarios con claridad. NUNCA maneja dinero real ni procesa pagos: el saldo es siempre virtual.
+Stratex es un **simulador de trading educativo** (proyecto universitario, sin fines de lucro y sin dinero real) con dos superficies: la app de inversión para el usuario final y un CRM/panel de administración para gestionar la operación. El éxito se mide por: flujo de trading creíble y fluido, y un back-office que permita entender y gestionar a miles de usuarios con claridad. NUNCA maneja dinero real ni procesa pagos: el saldo es siempre virtual.
 
 ## Brand Personality
 
@@ -23,7 +23,7 @@ Confiable, técnico, sereno. Tres palabras: **claro, profesional, en control.** 
 
 - Estética de "casino"/gamble: rojos y verdes saturados por todos lados, brillos, gradientes llamativos, promesas de ganancias. (Riesgo real en apps de trading; evitarlo a propósito.)
 - Plantillas de dashboard genéricas: fila de tarjetas hero con número gigante + gradiente, tarjetas idénticas repetidas.
-- Suplantar marcas reales (no usar el logo de Trading212; marca propia "SimTrade").
+- Suplantar marcas reales (no usar el logo de Trading212; marca propia "Stratex").
 
 ## Design Principles
 

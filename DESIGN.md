@@ -1,6 +1,6 @@
 # Design
 
-Sistema visual de SimTrade. Tema oscuro, denso, tipo terminal fintech. Dos acentos por superficie: **verde/rojo** para la app de trading (dirección del mercado) y **azul** para el CRM (acciones de administración).
+Sistema visual de Stratex. Tema oscuro, denso, tipo terminal fintech. Dos acentos por superficie: **verde/rojo** para la app de trading (dirección del mercado) y **azul** para el CRM (acciones de administración).
 
 ## Theme
 

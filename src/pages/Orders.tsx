@@ -30,7 +30,7 @@ export default function Orders() {
                     <AssetLogo symbol={o.symbol} size={34} />
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-[#F2F3F5]">
-                        <Link to={`/invest/${o.symbol}`} className="hover:text-[#16C784]">
+                        <Link to={`/app/invest/${o.symbol}`} className="hover:text-[#16C784]">
                           {o.symbol}
                         </Link>
                         <span className={`ml-2 text-xs font-medium ${isBuy ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>

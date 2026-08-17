@@ -6,11 +6,14 @@ export interface Candle {
   close: number;
 }
 
+export type AssetCategory = 'crypto' | 'forex' | 'stock' | 'metal';
+
 export interface Asset {
   symbol: string;
   name: string;
   price: number;
   spreadPct: number;
+  category: AssetCategory;
   candles: Candle[];
   source: 'sim' | 'live';
   coinId?: string; // CoinGecko id for live assets

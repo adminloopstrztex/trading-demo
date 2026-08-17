@@ -17,12 +17,12 @@ const ALLOWED_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5180';
 let SECRET = process.env.JWT_SECRET;
 if (!SECRET) {
   if (process.env.NODE_ENV === 'production') {
-    console.error('[SimTrade] JWT_SECRET es obligatorio en producción. Abortando.');
+    console.error('[Stratex] JWT_SECRET es obligatorio en producción. Abortando.');
     process.exit(1);
   }
   SECRET = randomBytes(48).toString('hex');
   console.warn(
-    '[SimTrade] JWT_SECRET no definido: usando un secreto aleatorio de desarrollo ' +
+    '[Stratex] JWT_SECRET no definido: usando un secreto aleatorio de desarrollo ' +
       '(las sesiones se invalidan al reiniciar). Define JWT_SECRET para producción.'
   );
 }
@@ -45,9 +45,35 @@ const authLimiter = rateLimit({
 
 // ---- helpers ----
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[0-9\s\-()]{7,20}$/;
+
+// Role-based access control for the back-office team.
+//  admin   – full control, can manage roles
+//  support – manage customers (moderate status/KYC, notes) but not reset or roles
+//  viewer  – read-only access to the CRM
+//  user    – end customer (trader), no CRM access
+const ROLE_PERMS = {
+  admin: ['crm.view', 'users.moderate', 'users.reset', 'roles.manage'],
+  support: ['crm.view', 'users.moderate'],
+  viewer: ['crm.view'],
+  user: [],
+};
+const STAFF_ROLES = ['admin', 'support', 'viewer'];
+const ASSIGNABLE_ROLES = ['admin', 'support', 'viewer', 'user'];
+
+function permsFor(role) {
+  return ROLE_PERMS[role] || [];
+}
+function hasPerm(user, perm) {
+  return permsFor(user.role).includes(perm);
+}
+function requirePerm(perm) {
+  return (req, res, next) =>
+    hasPerm(req.user, perm) ? next() : res.status(403).json({ error: 'No tienes permiso para esta acción' });
+}
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, permissions: permsFor(u.role) };
 }
 function accountSnapshot(u) {
   return {
@@ -103,6 +129,7 @@ function crmUser(u) {
     id: u.id,
     name: u.name,
     email: u.email,
+    phone: u.phone || '',
     role: u.role,
     status: u.status,
     kycStatus: u.kycStatus,
@@ -114,6 +141,7 @@ function crmUser(u) {
     holdingsCount: u.holdings.length,
     tradesCount: u.transactions.length,
     tags: u.tags || [],
+    survey: u.survey || null,
   };
 }
 
@@ -132,31 +160,55 @@ function auth(req, res, next) {
     return res.status(401).json({ error: 'Token inválido' });
   }
 }
-function adminOnly(req, res, next) {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Requiere rol admin' });
-  next();
-}
 function touch(user) {
   user.lastActiveAt = Date.now();
+}
+
+// Onboarding survey (all fields optional). Used to tailor the educational experience.
+const SURVEY_GOALS = ['basics', 'strategies', 'crypto', 'ready-to-invest', 'other'];
+function sanitizeSurvey(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const scale = (v) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : null;
+  };
+  const tradingExperience = scale(raw.tradingExperience);
+  const techComfort = scale(raw.techComfort);
+  const goal = SURVEY_GOALS.includes(raw.goal) ? raw.goal : null;
+  if (tradingExperience === null && techComfort === null && goal === null) return null;
+  return { tradingExperience, techComfort, goal };
 }
 // wraps async handlers so rejected promises become 500s instead of crashes
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---- auth ----
 app.post('/api/auth/register', authLimiter, (req, res) => {
-  const { name, email, password } = req.body || {};
-  if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string')
+  const { firstName, lastName, email, phone, password, survey } = req.body || {};
+  if (
+    typeof firstName !== 'string' ||
+    typeof lastName !== 'string' ||
+    typeof email !== 'string' ||
+    typeof phone !== 'string' ||
+    typeof password !== 'string'
+  )
     return res.status(400).json({ error: 'Datos inválidos' });
-  if (name.trim().length < 2) return res.status(400).json({ error: 'Nombre demasiado corto' });
+  if (firstName.trim().length < 2) return res.status(400).json({ error: 'El nombre es demasiado corto' });
+  if (lastName.trim().length < 2) return res.status(400).json({ error: 'El apellido es demasiado corto' });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Email inválido' });
+  if (!PHONE_RE.test(phone.trim())) return res.status(400).json({ error: 'Teléfono inválido' });
   if (password.length < 6)
     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
   if (findUserByEmail(email)) return res.status(409).json({ error: 'Ese email ya está registrado' });
 
+  const first = firstName.trim().slice(0, 40);
+  const last = lastName.trim().slice(0, 40);
   const user = {
     id: randomUUID(),
-    name: name.trim().slice(0, 60),
+    firstName: first,
+    lastName: last,
+    name: `${first} ${last}`,
     email: email.toLowerCase(),
+    phone: phone.trim().slice(0, 20),
     passwordHash: bcrypt.hashSync(password, 10),
     role: 'user',
     status: 'active',
@@ -168,6 +220,8 @@ app.post('/api/auth/register', authLimiter, (req, res) => {
     transactions: [],
     tags: ['lead'],
     notes: [],
+    pendingOrders: [],
+    survey: sanitizeSurvey(survey),
   };
   addUser(user);
   const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: '30d' });
@@ -302,7 +356,38 @@ function deltaPct(curr, prev) {
   return Math.round(((curr - prev) / prev) * 100);
 }
 
-app.get('/api/admin/metrics', auth, adminOnly, (_req, res) => {
+// Experience level bucket from the 1–10 onboarding scale.
+function experienceLevel(score) {
+  if (score == null) return null;
+  if (score <= 3) return 'beginner';
+  if (score <= 7) return 'intermediate';
+  return 'advanced';
+}
+
+// Aggregates of the onboarding survey across a set of users.
+function surveyStats(users) {
+  const answered = users.filter((u) => u.survey);
+  const avg = (key) => {
+    const vals = answered.map((u) => u.survey[key]).filter((v) => typeof v === 'number');
+    return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : 0;
+  };
+  const experience = { beginner: 0, intermediate: 0, advanced: 0 };
+  const goals = { basics: 0, strategies: 0, crypto: 0, 'ready-to-invest': 0, other: 0 };
+  for (const u of answered) {
+    const lvl = experienceLevel(u.survey.tradingExperience);
+    if (lvl) experience[lvl]++;
+    if (u.survey.goal && goals[u.survey.goal] != null) goals[u.survey.goal]++;
+  }
+  return {
+    responded: answered.length,
+    avgExperience: avg('tradingExperience'),
+    avgTech: avg('techComfort'),
+    experience,
+    goals,
+  };
+}
+
+app.get('/api/admin/metrics', auth, requirePerm('crm.view'), (_req, res) => {
   const users = getDb().users.filter((u) => u.role === 'user');
   const now = Date.now();
   const dayAgo = now - 24 * 60 * 60 * 1000;
@@ -349,10 +434,11 @@ app.get('/api/admin/metrics', auth, adminOnly, (_req, res) => {
       trades: deltaPct(tradesCurr, tradesPrev),
       volume: deltaPct(volCurr, volPrev),
     },
+    survey: surveyStats(users),
   });
 });
 
-app.get('/api/admin/assets', auth, adminOnly, (_req, res) => {
+app.get('/api/admin/assets', auth, requirePerm('crm.view'), (_req, res) => {
   const users = getDb().users.filter((u) => u.role === 'user');
   const map = {};
   for (const u of users) {
@@ -366,7 +452,7 @@ app.get('/api/admin/assets', auth, adminOnly, (_req, res) => {
   res.json(list.map((a) => ({ ...a, volume: Math.round(a.volume) })));
 });
 
-app.get('/api/admin/timeseries', auth, adminOnly, (req, res) => {
+app.get('/api/admin/timeseries', auth, requirePerm('crm.view'), (req, res) => {
   const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
   const users = getDb().users.filter((u) => u.role === 'user');
   const dayMs = 24 * 60 * 60 * 1000;
@@ -413,8 +499,8 @@ app.get('/api/admin/timeseries', auth, adminOnly, (req, res) => {
   res.json(series);
 });
 
-app.get('/api/admin/users', auth, adminOnly, (req, res) => {
-  const { q, status, kyc, segment, sort } = req.query;
+app.get('/api/admin/users', auth, requirePerm('crm.view'), (req, res) => {
+  const { q, status, kyc, segment, sort, experience, goal } = req.query;
   let users = getDb().users.filter((u) => u.role === 'user');
   if (q) {
     const term = String(q).toLowerCase();
@@ -424,6 +510,8 @@ app.get('/api/admin/users', auth, adminOnly, (req, res) => {
   if (kyc) users = users.filter((u) => u.kycStatus === kyc);
   if (segment === 'lead') users = users.filter((u) => u.transactions.length === 0);
   if (segment === 'active') users = users.filter((u) => u.transactions.length > 0);
+  if (experience) users = users.filter((u) => experienceLevel(u.survey?.tradingExperience) === experience);
+  if (goal) users = users.filter((u) => u.survey?.goal === goal);
 
   const equity = (u) => u.virtualBalance + u.holdings.reduce((a, h) => a + h.avgPrice * h.quantity, 0);
   if (sort === 'equity') users.sort((a, b) => equity(b) - equity(a));
@@ -436,16 +524,18 @@ app.get('/api/admin/users', auth, adminOnly, (req, res) => {
   res.json({ items, total, page, pageSize });
 });
 
-app.get('/api/admin/users/:id', auth, adminOnly, (req, res) => {
+app.get('/api/admin/users/:id', auth, requirePerm('crm.view'), (req, res) => {
   const user = findUserById(req.params.id);
-  if (!user || user.role === 'admin') return res.status(404).json({ error: 'No encontrado' });
+  if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
   res.json({ ...crmUser(user), holdings: user.holdings, transactions: user.transactions, notes: user.notes || [] });
 });
 
-app.patch('/api/admin/users/:id', auth, adminOnly, (req, res) => {
+app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res) => {
   const user = findUserById(req.params.id);
-  if (!user || user.role === 'admin') return res.status(404).json({ error: 'No encontrado' });
+  if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
   const { status, kycStatus, tags, resetBalance } = req.body || {};
+  if (resetBalance && !hasPerm(req.user, 'users.reset'))
+    return res.status(403).json({ error: 'No tienes permiso para resetear saldos' });
   if (status && ['active', 'suspended'].includes(status)) user.status = status;
   if (kycStatus && ['none', 'pending', 'verified'].includes(kycStatus)) user.kycStatus = kycStatus;
   if (Array.isArray(tags)) user.tags = tags.map((t) => String(t).slice(0, 24)).slice(0, 20);
@@ -458,9 +548,9 @@ app.patch('/api/admin/users/:id', auth, adminOnly, (req, res) => {
   res.json(crmUser(user));
 });
 
-app.post('/api/admin/users/:id/notes', auth, adminOnly, (req, res) => {
+app.post('/api/admin/users/:id/notes', auth, requirePerm('users.moderate'), (req, res) => {
   const user = findUserById(req.params.id);
-  if (!user || user.role === 'admin') return res.status(404).json({ error: 'No encontrado' });
+  if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) return res.status(400).json({ error: 'Nota vacía' });
   const note = { id: randomUUID(), text: text.slice(0, 1000), at: Date.now(), by: req.user.name };
@@ -469,17 +559,69 @@ app.post('/api/admin/users/:id/notes', auth, adminOnly, (req, res) => {
   res.json(note);
 });
 
+// ---- team & roles ----
+app.get('/api/admin/staff', auth, requirePerm('crm.view'), (_req, res) => {
+  const staff = getDb()
+    .users.filter((u) => STAFF_ROLES.includes(u.role))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, lastActiveAt: u.lastActiveAt }));
+  res.json(staff);
+});
+
+app.patch('/api/admin/users/:id/role', auth, requirePerm('roles.manage'), (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'No encontrado' });
+  const { role } = req.body || {};
+  if (!ASSIGNABLE_ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'No puedes cambiar tu propio rol' });
+  user.role = role;
+  saveUser(user);
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+// create a brand-new staff account
+app.post('/api/admin/staff', auth, requirePerm('roles.manage'), (req, res) => {
+  const { name, email, password, role } = req.body || {};
+  if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Datos inválidos' });
+  if (name.trim().length < 2) return res.status(400).json({ error: 'Nombre demasiado corto' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Email inválido' });
+  if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  if (!STAFF_ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+  if (findUserByEmail(email)) return res.status(409).json({ error: 'Ese email ya está registrado' });
+
+  const user = {
+    id: randomUUID(),
+    name: name.trim().slice(0, 60),
+    email: email.toLowerCase(),
+    passwordHash: bcrypt.hashSync(password, 10),
+    role,
+    status: 'active',
+    kycStatus: 'verified',
+    createdAt: Date.now(),
+    lastActiveAt: Date.now(),
+    virtualBalance: STARTING_BALANCE,
+    holdings: [],
+    transactions: [],
+    tags: [],
+    notes: [],
+    pendingOrders: [],
+  };
+  addUser(user);
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, lastActiveAt: user.lastActiveAt });
+});
+
 // fallback error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
-  console.error('[SimTrade] error:', err);
+  console.error('[Stratex] error:', err);
   res.status(500).json({ error: 'Error interno' });
 });
 
 // Only start the HTTP listener when run as a real server, not when imported by tests.
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
-    console.log(`SimTrade API en http://localhost:${PORT}`);
+    console.log(`Stratex API en http://localhost:${PORT}`);
   });
 }
 

@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
+import { useAccountStore } from '../../store/accountStore';
 import type { CrmUserDetail, CrmUser, Note } from './types';
-import { Avatar, KycBadge, StatusBadge, Skeleton, timeAgo } from './ui';
+import { Avatar, KycBadge, StatusBadge, Skeleton } from './ui';
+import { timeAgo } from './format';
+import { GOAL_LABELS } from './survey';
 
 export default function AdminUserDetail() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const perms = useAccountStore((s) => s.user?.permissions ?? []);
+  const canModerate = perms.includes('users.moderate');
+  const canReset = perms.includes('users.reset');
+  const canManageRoles = perms.includes('roles.manage');
   const [u, setU] = useState<CrmUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
@@ -36,6 +44,18 @@ export default function AdminUserDetail() {
     });
     setNoteText('');
     setU((prev) => (prev ? { ...prev, notes: [note, ...prev.notes] } : prev));
+  }
+
+  async function promoteToStaff(role: 'support' | 'viewer' | 'admin') {
+    const labels = { support: 'Soporte', viewer: 'Analista', admin: 'Administrador' };
+    if (!confirm(`¿Convertir a ${u?.name} en ${labels[role]} del equipo? Dejará de ser un cliente.`)) return;
+    setBusy(true);
+    try {
+      await api(`/admin/users/${id}/role`, { method: 'PATCH', body: { role } });
+      navigate('/admin/team');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (error) return <p className="text-[#FF5C5C] text-sm">{error}</p>;
@@ -79,7 +99,10 @@ export default function AdminUserDetail() {
             <StatusBadge status={u.status} />
             <KycBadge kyc={u.kycStatus} />
           </div>
-          <p className="text-sm text-[#8B92A0]">{u.email}</p>
+          <p className="text-sm text-[#8B92A0]">
+            {u.email}
+            {u.phone && <span className="text-[#5B6472]"> · {u.phone}</span>}
+          </p>
           <p className="text-xs text-[#5B6472] mt-0.5">
             Registrado {timeAgo(u.createdAt)} · Última actividad {timeAgo(u.lastActiveAt)}
           </p>
@@ -129,21 +152,23 @@ export default function AdminUserDetail() {
           </Card>
 
           <Card title="Notas internas">
-            <div className="flex gap-2 mb-3">
-              <input
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addNote()}
-                placeholder="Añadir nota…"
-                className="flex-1 rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] focus:outline-none focus:border-[#3B82F6]"
-              />
-              <button
-                onClick={addNote}
-                className="rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white text-sm font-medium px-4"
-              >
-                Añadir
-              </button>
-            </div>
+            {canModerate && (
+              <div className="flex gap-2 mb-3">
+                <input
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addNote()}
+                  placeholder="Añadir nota…"
+                  className="flex-1 rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] focus:outline-none focus:border-[#3B82F6]"
+                />
+                <button
+                  onClick={addNote}
+                  className="rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white text-sm font-medium px-4"
+                >
+                  Añadir
+                </button>
+              </div>
+            )}
             {u.notes.length === 0 ? (
               <Empty>Sin notas todavía.</Empty>
             ) : (
@@ -162,6 +187,7 @@ export default function AdminUserDetail() {
         </div>
 
         <div className="space-y-5">
+          {canModerate && (
           <Card title="Acciones de administrador">
             <div className="space-y-4 text-sm">
               <Control label="Estado de la cuenta">
@@ -185,19 +211,22 @@ export default function AdminUserDetail() {
                 </ActionBtn>
               </Control>
 
-              <Control label="Saldo demo">
-                <ActionBtn
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm('¿Resetear el saldo virtual de este usuario a $10,000 y borrar sus posiciones?'))
-                      patch({ resetBalance: true });
-                  }}
-                >
-                  Resetear a $10,000
-                </ActionBtn>
-              </Control>
+              {canReset && (
+                <Control label="Saldo demo">
+                  <ActionBtn
+                    disabled={busy}
+                    onClick={() => {
+                      if (confirm('¿Resetear el saldo virtual de este usuario a $10,000 y borrar sus posiciones?'))
+                        patch({ resetBalance: true });
+                    }}
+                  >
+                    Resetear a $10,000
+                  </ActionBtn>
+                </Control>
+              )}
             </div>
           </Card>
+          )}
 
           <Card title="Etiquetas">
             {u.tags.length === 0 ? (
@@ -212,6 +241,40 @@ export default function AdminUserDetail() {
               </div>
             )}
           </Card>
+
+          <Card title="Perfil de onboarding">
+            {!u.survey ? (
+              <Empty>El usuario no completó la encuesta.</Empty>
+            ) : (
+              <div className="space-y-3">
+                <SurveyScale label="Experiencia en trading" value={u.survey.tradingExperience} />
+                <SurveyScale label="Comodidad con la tecnología" value={u.survey.techComfort} />
+                <div>
+                  <div className="text-xs text-[#8B92A0] mb-0.5">Objetivo</div>
+                  <div className="text-sm text-[#D5DAE2]">{GOAL_LABELS[u.survey.goal ?? ''] ?? '—'}</div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {canManageRoles && (
+            <Card title="Rol y acceso">
+              <p className="text-xs text-[#8B92A0] mb-3">
+                Este usuario es <span className="text-[#B8BFCC]">cliente</span>. Puedes convertirlo en miembro del equipo con acceso al CRM.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <ActionBtn disabled={busy} onClick={() => promoteToStaff('support')}>
+                  Hacer Soporte
+                </ActionBtn>
+                <ActionBtn disabled={busy} onClick={() => promoteToStaff('viewer')}>
+                  Hacer Analista
+                </ActionBtn>
+                <ActionBtn disabled={busy} onClick={() => promoteToStaff('admin')}>
+                  Hacer Admin
+                </ActionBtn>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>
@@ -265,6 +328,25 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function SurveyScale({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-xs text-[#8B92A0]">{label}</span>
+        <span className="text-xs font-semibold tabular-nums text-[#F2F3F5]">
+          {value == null ? '—' : `${value}/10`}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-[#1E2128] overflow-hidden">
+        <div
+          className="h-full rounded-full bg-[#16C784]"
+          style={{ width: `${((value ?? 0) / 10) * 100}%` }}
+        />
+      </div>
     </div>
   );
 }

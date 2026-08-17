@@ -18,7 +18,7 @@ export default function Logo({ size = 28 }: { size?: number }) {
           strokeLinejoin="round"
         />
       </svg>
-      <span className="font-semibold text-[17px] text-[#F2F3F5] tracking-tight">SimTrade</span>
+      <span className="font-semibold text-[17px] text-[#F2F3F5] tracking-tight">Stratex</span>
     </div>
   );
 }

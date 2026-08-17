@@ -65,7 +65,7 @@ export default function Portfolio() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-[#F2F3F5]">Tus inversiones</h2>
-          <Link to="/invest" className="text-sm font-medium text-[#16C784]">
+          <Link to="/app/invest" className="text-sm font-medium text-[#16C784]">
             + Invertir
           </Link>
         </div>
@@ -74,7 +74,7 @@ export default function Portfolio() {
           <div className="bg-[#101216] rounded-2xl border border-[#1E2128] p-8 text-center">
             <p className="text-sm text-[#8B92A0] mb-3">Aún no tienes inversiones.</p>
             <Link
-              to="/invest"
+              to="/app/invest"
               className="inline-block bg-[#16C784] hover:bg-[#13B374] text-[#0A0B0D] text-sm font-medium rounded-xl px-4 py-2"
             >
               Explorar mercado
@@ -91,7 +91,7 @@ export default function Portfolio() {
               return (
                 <Link
                   key={h.symbol}
-                  to={`/invest/${h.symbol}`}
+                  to={`/app/invest/${h.symbol}`}
                   className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.03]"
                 >
                   <div className="flex items-center gap-3">

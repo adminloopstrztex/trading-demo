@@ -266,6 +266,7 @@ export default function TradingChart({
     }
     chartRef.current?.timeScale().fitContent();
     requestAnimationFrame(redraw);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line, candles, type]);
 
   function drawSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {

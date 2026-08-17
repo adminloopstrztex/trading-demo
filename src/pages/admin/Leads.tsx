@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import type { CrmUser, PagedUsers } from './types';
-import { Avatar, KycBadge, Skeleton, EmptyState, timeAgo } from './ui';
+import { Avatar, KycBadge, Skeleton, EmptyState } from './ui';
+import { timeAgo } from './format';
 
 export default function AdminLeads() {
   const [leads, setLeads] = useState<CrmUser[] | null>(null);

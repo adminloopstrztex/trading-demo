@@ -6,7 +6,7 @@ let adminToken;
 let userToken;
 
 beforeAll(async () => {
-  const a = await request(app).post('/api/auth/login').send({ email: 'admin@simtrade.com', password: 'admin123' });
+  const a = await request(app).post('/api/auth/login').send({ email: 'admin@stratex.com', password: 'admin123' });
   adminToken = a.body.token;
   const u = await request(app).post('/api/auth/login').send({ email: 'maria@example.com', password: 'demo1234' });
   userToken = u.body.token;

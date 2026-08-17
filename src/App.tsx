@@ -2,11 +2,13 @@ import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useAccountStore } from './store/accountStore';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
 import AppShell from './components/AppShell';
 import Portfolio from './pages/Portfolio';
 import Invest from './pages/Invest';
 import InstrumentDetail from './pages/InstrumentDetail';
 import Orders from './pages/Orders';
+import Terminal from './pages/Terminal';
 
 // Admin/CRM is lazy-loaded so Recharts ships in its own chunk, out of the main bundle.
 const AdminShell = lazy(() => import('./components/AdminShell'));
@@ -14,6 +16,7 @@ const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminUserDetail = lazy(() => import('./pages/admin/UserDetail'));
 const AdminLeads = lazy(() => import('./pages/admin/Leads'));
+const AdminTeam = lazy(() => import('./pages/admin/Team'));
 
 function FullScreenLoader() {
   return (
@@ -37,18 +40,21 @@ export default function App() {
     <BrowserRouter>
       <Suspense fallback={<FullScreenLoader />}>
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route element={<AppShell />}>
-            <Route path="/" element={<Portfolio />} />
-            <Route path="/invest" element={<Invest />} />
-            <Route path="/invest/:symbol" element={<InstrumentDetail />} />
-            <Route path="/orders" element={<Orders />} />
+            <Route path="/app" element={<Portfolio />} />
+            <Route path="/app/terminal" element={<Terminal />} />
+            <Route path="/app/invest" element={<Invest />} />
+            <Route path="/app/invest/:symbol" element={<InstrumentDetail />} />
+            <Route path="/app/orders" element={<Orders />} />
           </Route>
           <Route element={<AdminShell />}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/users/:id" element={<AdminUserDetail />} />
             <Route path="/admin/leads" element={<AdminLeads />} />
+            <Route path="/admin/team" element={<AdminTeam />} />
           </Route>
         </Routes>
       </Suspense>

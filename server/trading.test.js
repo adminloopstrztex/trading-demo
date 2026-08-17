@@ -11,7 +11,7 @@ async function authed(method, path, body) {
 beforeAll(async () => {
   const res = await request(app)
     .post('/api/auth/register')
-    .send({ name: 'Trader', email: 'trader@test.com', password: 'secret123' });
+    .send({ firstName: 'Trader', lastName: 'Test', email: 'trader@test.com', phone: '+51 900 000 000', password: 'secret123' });
   token = res.body.token;
 });
 

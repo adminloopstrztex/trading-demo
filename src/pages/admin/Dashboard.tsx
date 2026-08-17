@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import type { Metrics, CrmUser, AssetVolume, PagedUsers } from './types';
-import { Card, Skeleton, Avatar, StatusBadge, timeAgo, fmtMoney } from './ui';
-import { Sparkline, GrowthChart, VolumeChart, KycDonut, AssetBars, type SeriesPoint } from './charts';
+import { Card, Skeleton, Avatar, StatusBadge } from './ui';
+import { timeAgo, fmtMoney } from './format';
+import { Sparkline, GrowthChart, VolumeChart, KycDonut, AssetBars, GoalDonut, ExperienceBars, type SeriesPoint } from './charts';
 
 const RANGES: { key: number; label: string }[] = [
   { key: 7, label: '7D' },
@@ -100,6 +101,37 @@ export default function AdminDashboard() {
           ) : (
             <Skeleton className="h-36 rounded-xl" />
           )}
+        </Card>
+      </div>
+
+      {/* Onboarding survey: experience level + learning goals */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-5 items-stretch">
+        <Card
+          title="Perfil de onboarding"
+          action={
+            <span className="text-xs text-[#5B6472]">
+              {m ? `${m.survey.responded} de ${m.totalUsers} respondieron` : ''}
+            </span>
+          }
+        >
+          {m ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="Experiencia media" value={`${m.survey.avgExperience}/10`} />
+                <MiniStat label="Comodidad tecnología" value={`${m.survey.avgTech}/10`} />
+              </div>
+              <div>
+                <div className="text-xs text-[#8B92A0] mb-2">Nivel de experiencia</div>
+                <ExperienceBars survey={m.survey} />
+              </div>
+            </div>
+          ) : (
+            <Skeleton className="h-48 rounded-xl" />
+          )}
+        </Card>
+
+        <Card title="Objetivos de aprendizaje">
+          {m ? <GoalDonut goals={m.survey.goals} /> : <Skeleton className="h-36 rounded-xl" />}
         </Card>
       </div>
 
@@ -283,6 +315,15 @@ function Kpi({
       </div>
       <div className="text-[11px] text-[#5B6472] mt-0.5 mb-2">{sub}</div>
       <div className="mt-auto">{children}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#0A0B0D] border border-[#1E2128] rounded-xl px-3 py-2.5">
+      <div className="text-[11px] text-[#8B92A0]">{label}</div>
+      <div className="text-lg font-semibold text-[#F2F3F5] tabular-nums mt-0.5">{value}</div>
     </div>
   );
 }

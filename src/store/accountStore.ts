@@ -2,9 +2,12 @@ import { create } from 'zustand';
 import type { Holding, Transaction, PendingOrder, User } from '../types';
 import { api, setToken, getToken } from '../api';
 
+export type Role = 'user' | 'admin' | 'support' | 'viewer';
+
 interface AuthUser extends User {
   id: string;
-  role: 'user' | 'admin';
+  role: Role;
+  permissions: string[];
 }
 
 interface AccountSnapshot {
@@ -22,6 +25,21 @@ interface AuthResponse {
 
 type Result = { ok: boolean; error?: string; executedPrice?: number };
 
+export interface OnboardingSurvey {
+  tradingExperience: number | null;
+  techComfort: number | null;
+  goal: string | null;
+}
+
+export interface RegisterData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  survey?: OnboardingSurvey;
+}
+
 interface AccountState {
   user: AuthUser | null;
   ready: boolean;
@@ -31,7 +49,7 @@ interface AccountState {
   pendingOrders: PendingOrder[];
   restore: () => Promise<void>;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  register: (data: RegisterData) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   trade: (side: 'buy' | 'sell', symbol: string, quantity: number, price: number) => Promise<Result>;
   createOrder: (
@@ -97,11 +115,11 @@ export const useAccountStore = create<AccountState>((set) => ({
     }
   },
 
-  register: async (name, email, password) => {
+  register: async (data) => {
     try {
-      const data = await api<AuthResponse>('/auth/register', { method: 'POST', body: { name, email, password } });
-      setToken(data.token);
-      set(applySnapshot(data.user, data.account));
+      const res = await api<AuthResponse>('/auth/register', { method: 'POST', body: data });
+      setToken(res.token);
+      set(applySnapshot(res.user, res.account));
       return { ok: true };
     } catch (e) {
       return { ok: false, error: (e as Error).message };

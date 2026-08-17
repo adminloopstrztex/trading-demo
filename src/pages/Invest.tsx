@@ -37,7 +37,7 @@ export default function Invest() {
           return (
             <Link
               key={asset.symbol}
-              to={`/invest/${asset.symbol}`}
+              to={`/app/invest/${asset.symbol}`}
               className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.03]"
             >
               <div className="flex items-center gap-3">

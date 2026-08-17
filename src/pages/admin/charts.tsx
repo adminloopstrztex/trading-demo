@@ -10,8 +10,9 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { fmtMoney } from './ui';
-import type { AssetVolume } from './types';
+import { fmtMoney } from './format';
+import type { AssetVolume, SurveyStats } from './types';
+import { GOAL_LABELS, GOAL_ORDER, GOAL_COLORS, EXPERIENCE_LEVELS } from './survey';
 
 export interface SeriesPoint {
   date: string;
@@ -182,6 +183,77 @@ export function AssetBars({ data }: { data: AssetVolume[] }) {
           <span className="w-20 text-right text-xs text-[#F2F3F5] tabular-nums">{fmtMoney(d.volume)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Donut of onboarding goals distribution.
+export function GoalDonut({ goals }: { goals: Record<string, number> }) {
+  const data = GOAL_ORDER.map((key) => ({
+    name: GOAL_LABELS[key],
+    value: goals[key] || 0,
+    color: GOAL_COLORS[key],
+  })).filter((d) => d.value > 0);
+  const total = data.reduce((s, d) => s + d.value, 0);
+
+  if (total === 0) return <p className="text-sm text-[#5B6472]">Nadie ha respondido la encuesta todavía.</p>;
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative h-36 w-36 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" innerRadius={46} outerRadius={64} paddingAngle={2} stroke="none" isAnimationActive={false}>
+              {data.map((d) => (
+                <Cell key={d.name} fill={d.color} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-xl font-semibold text-[#F2F3F5] leading-none">{total}</span>
+          <span className="text-[10px] text-[#8B92A0] mt-0.5">respuestas</span>
+        </div>
+      </div>
+      <ul className="space-y-2 text-sm flex-1 min-w-0">
+        {data.map((d) => (
+          <li key={d.name} className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+            <span className="text-[#B8BFCC] flex-1 truncate">{d.name}</span>
+            <span className="text-[#F2F3F5] font-medium tabular-nums">{d.value}</span>
+            <span className="text-xs text-[#5B6472] w-9 text-right tabular-nums">
+              {Math.round((d.value / total) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Horizontal bars of experience-level distribution.
+export function ExperienceBars({ survey }: { survey: SurveyStats }) {
+  const total = EXPERIENCE_LEVELS.reduce((s, l) => s + (survey.experience[l.key] || 0), 0);
+  if (total === 0) return <p className="text-sm text-[#5B6472]">Sin respuestas de experiencia todavía.</p>;
+  return (
+    <div className="space-y-3">
+      {EXPERIENCE_LEVELS.map((l) => {
+        const value = survey.experience[l.key] || 0;
+        const p = Math.round((value / total) * 100);
+        return (
+          <div key={l.key}>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-[#B8BFCC]">{l.label}</span>
+              <span className="text-[#8B92A0] tabular-nums">
+                {value} · {p}%
+              </span>
+            </div>
+            <div className="h-2 bg-[#1A1D23] rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${p}%`, background: l.color }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

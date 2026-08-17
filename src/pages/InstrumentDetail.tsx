@@ -56,7 +56,7 @@ export default function InstrumentDetail() {
     };
   }, [isLive, days, symbol, setLiveCandles]);
 
-  if (!asset) return <Navigate to="/invest" replace />;
+  if (!asset) return <Navigate to="/app/invest" replace />;
 
   const decimals = asset.price > 1000 ? 2 : asset.price < 10 ? 5 : 2;
   const rangeCount = RANGES.find((r) => r.key === range)?.count ?? asset.candles.length;
@@ -110,7 +110,7 @@ export default function InstrumentDetail() {
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       <div className="flex items-center justify-between mb-3">
-        <Link to="/invest" className="text-sm text-[#8B92A0] hover:text-[#F2F3F5]">
+        <Link to="/app/invest" className="text-sm text-[#8B92A0] hover:text-[#F2F3F5]">
           ← Volver a Invertir
         </Link>
         <div className="flex items-center gap-3">
