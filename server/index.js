@@ -73,7 +73,7 @@ function requirePerm(perm) {
 }
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, permissions: permsFor(u.role) };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, permissions: permsFor(u.role), survey: u.survey || null };
 }
 function accountSnapshot(u) {
   return {

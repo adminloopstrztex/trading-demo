@@ -8,6 +8,7 @@ interface AuthUser extends User {
   id: string;
   role: Role;
   permissions: string[];
+  survey?: OnboardingSurvey | null;
 }
 
 interface AccountSnapshot {
