@@ -14,6 +14,9 @@ dist-ssr
 
 # runtime data store & secrets
 server/db.json
+server/stratex.db
+server/stratex.db-wal
+server/stratex.db-shm
 .env
 
 # Editor directories and files
