@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useMarketStore } from '../store/marketStore';
 import { useAccountStore } from '../store/accountStore';
 import TradingViewChart from '../components/TradingViewChart';
+import Price from '../components/Price';
+import { toast } from '../store/toastStore';
 import type { Asset, AssetCategory } from '../types';
 
 const CATEGORIES: { key: AssetCategory | 'all'; label: string }[] = [
@@ -137,7 +139,7 @@ export default function Terminal() {
             <div className="flex items-baseline gap-3 min-w-0">
               <span className="text-base font-semibold text-[#F2F3F5]">{asset.symbol}</span>
               <span className="text-xs text-[#8B92A0] truncate">{asset.name}</span>
-              <span className="text-sm font-mono text-[#F2F3F5]">{asset.price.toFixed(dec)}</span>
+              <Price value={asset.price} format={(v) => v.toFixed(dec)} className="text-sm font-mono text-[#F2F3F5]" />
               <span className={`text-xs font-medium ${positive ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>
                 {positive ? '+' : ''}
                 {changePct.toFixed(2)}%
@@ -162,19 +164,22 @@ export default function Terminal() {
 function TradeBar({ symbol, bid, ask, dec, price }: { symbol: string; bid: number; ask: number; dec: number; price: number }) {
   const trade = useAccountStore((s) => s.trade);
   const [amount, setAmount] = useState('100');
-  const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function go(side: 'buy' | 'sell') {
     const usd = Number(amount) || 0;
     if (!(usd > 0)) {
-      setMsg('Monto inválido');
+      toast.error('Monto inválido', 'Ingresa un monto en USD mayor a 0.');
       return;
     }
     setBusy(true);
     const res = await trade(side, symbol, usd / price, price);
     setBusy(false);
-    setMsg(res.ok ? `${side === 'buy' ? 'Compra' : 'Venta'} ejecutada` : res.error || 'Error');
+    if (res.ok) {
+      toast.success(`${side === 'buy' ? 'Compra ejecutada' : 'Venta ejecutada'}`, `$${usd.toFixed(2)} de ${symbol}.`);
+    } else {
+      toast.error('No se pudo operar', res.error || 'Inténtalo de nuevo.');
+    }
   }
 
   return (
@@ -204,7 +209,6 @@ function TradeBar({ symbol, bid, ask, dec, price }: { symbol: string; bid: numbe
       >
         Comprar {ask.toFixed(dec)}
       </button>
-      {msg && <span className="text-xs text-[#8B92A0]">{msg}</span>}
     </div>
   );
 }

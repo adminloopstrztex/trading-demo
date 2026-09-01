@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMarketStore } from '../store/marketStore';
 import MiniSparkline from '../components/MiniSparkline';
 import AssetLogo from '../components/AssetLogo';
+import Price from '../components/Price';
 
 export default function Invest() {
   const assets = useMarketStore((s) => s.assets);
@@ -57,7 +58,11 @@ export default function Invest() {
               </div>
               <MiniSparkline values={closes} positive={positive} />
               <div className="text-right w-24">
-                <div className="font-medium text-[#F2F3F5]">{asset.price.toFixed(decimals)}</div>
+                <Price
+                  value={asset.price}
+                  format={(v) => v.toFixed(decimals)}
+                  className="font-medium text-[#F2F3F5] inline-block"
+                />
                 <div className={`text-xs font-medium ${positive ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>
                   {positive ? '+' : ''}
                   {changePct.toFixed(2)}%

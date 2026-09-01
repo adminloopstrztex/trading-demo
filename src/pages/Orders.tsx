@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAccountStore } from '../store/accountStore';
 import AssetLogo from '../components/AssetLogo';
+import { toast } from '../store/toastStore';
 
 export default function Orders() {
   const transactions = useAccountStore((s) => s.transactions);
@@ -43,7 +44,10 @@ export default function Orders() {
                     </div>
                   </div>
                   <button
-                    onClick={() => cancelOrder(o.id)}
+                    onClick={() => {
+                      cancelOrder(o.id);
+                      toast.info('Orden cancelada', `${isBuy ? 'Compra' : 'Venta'} ${o.type === 'limit' ? 'límite' : 'stop'} de ${o.symbol}.`);
+                    }}
                     className="text-xs font-medium text-[#8B92A0] hover:text-[#FF5C5C] border border-[#262A33] hover:border-[#FF5C5C]/40 rounded-lg px-3 py-1.5 transition-colors"
                   >
                     Cancelar

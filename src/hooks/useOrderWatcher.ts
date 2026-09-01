@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAccountStore } from '../store/accountStore';
 import { useMarketStore } from '../store/marketStore';
+import { toast } from '../store/toastStore';
 import type { PendingOrder } from '../types';
 
 // Mirror of the server's trigger rules (server re-validates authoritatively).
@@ -26,7 +27,15 @@ export function useOrderWatcher() {
       if (!price || inflight.current.has(o.id)) continue;
       if (orderTriggered(o, price)) {
         inflight.current.add(o.id);
-        executeOrder(o.id, price).finally(() => inflight.current.delete(o.id));
+        const label = o.type === 'limit' ? 'límite' : 'stop';
+        executeOrder(o.id, price)
+          .then(() =>
+            toast.success(
+              'Orden ejecutada',
+              `Se ejecutó tu orden ${label} de ${o.side === 'buy' ? 'compra' : 'venta'} de ${o.symbol} en $${price.toLocaleString('es-ES')}.`
+            )
+          )
+          .finally(() => inflight.current.delete(o.id));
       }
     }
   }, [pendingOrders, assets, executeOrder]);

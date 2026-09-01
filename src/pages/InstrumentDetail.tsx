@@ -5,6 +5,8 @@ import { useAccountStore } from '../store/accountStore';
 import { fetchCryptoCandles } from '../data/cryptoFeed';
 import TradingChart from '../components/TradingChart';
 import AssetLogo from '../components/AssetLogo';
+import { toast } from '../store/toastStore';
+import Price from '../components/Price';
 
 const RANGES = [
   { key: '1D', count: 30, days: 1 },
@@ -36,7 +38,6 @@ export default function InstrumentDetail() {
   const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop'>('market');
   const [amount, setAmount] = useState('100');
   const [target, setTarget] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -78,31 +79,39 @@ export default function InstrumentDetail() {
   async function handleConfirm() {
     if (submitting) return;
     if (!(amountNum > 0)) {
-      setFeedback('Ingresa un monto válido.');
+      toast.error('Monto inválido', 'Ingresa un monto en USD mayor a 0.');
       return;
     }
     if (orderType !== 'market' && !(targetNum > 0)) {
-      setFeedback('Ingresa un precio objetivo válido.');
+      toast.error('Precio objetivo inválido', 'Ingresa un precio objetivo válido.');
       return;
     }
     setSubmitting(true);
     if (orderType === 'market') {
       const result = await trade(mode, symbol, amountNum / asset.price, asset.price);
       setSubmitting(false);
-      setFeedback(
-        result.ok
-          ? `${mode === 'buy' ? 'Compraste' : 'Vendiste'} $${amountNum.toFixed(2)} de ${symbol}.`
-          : result.error || 'No se pudo completar la operación.'
-      );
+      if (result.ok) {
+        toast.success(
+          `${mode === 'buy' ? 'Compra ejecutada' : 'Venta ejecutada'}`,
+          `${mode === 'buy' ? 'Compraste' : 'Vendiste'} $${amountNum.toFixed(2)} de ${symbol}.`
+        );
+        setPanelOpen(false);
+      } else {
+        toast.error('No se pudo operar', result.error || 'Inténtalo de nuevo.');
+      }
     } else {
       const result = await createOrder(orderType, mode, symbol, orderUnits, targetNum);
       setSubmitting(false);
       if (result.ok) {
         const label = orderType === 'limit' ? 'límite' : 'stop';
-        setFeedback(`Orden ${label} de ${mode === 'buy' ? 'compra' : 'venta'} creada en ${targetNum}.`);
+        toast.success(
+          'Orden creada',
+          `Orden ${label} de ${mode === 'buy' ? 'compra' : 'venta'} en ${targetNum}.`
+        );
         setTarget('');
+        setPanelOpen(false);
       } else {
-        setFeedback(result.error || 'No se pudo crear la orden.');
+        toast.error('No se pudo crear la orden', result.error || 'Inténtalo de nuevo.');
       }
     }
   }
@@ -165,9 +174,11 @@ export default function InstrumentDetail() {
           <div className="text-xs text-[#8B92A0]">{asset.name}</div>
         </div>
         <div className="ml-auto text-right">
-          <div className="text-[26px] font-semibold text-[#F2F3F5] leading-tight">
-            {asset.price.toFixed(decimals)}
-          </div>
+          <Price
+            value={asset.price}
+            format={(v) => v.toFixed(decimals)}
+            className="text-[26px] font-semibold text-[#F2F3F5] leading-tight inline-block"
+          />
           <div className={`text-sm font-medium ${positive ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>
             {positive ? '+' : ''}
             {changePct.toFixed(2)}% ({range})
@@ -312,8 +323,6 @@ export default function InstrumentDetail() {
               )}
             </div>
           </div>
-
-          {feedback && <p className="text-xs text-[#8B92A0] mt-3 text-center">{feedback}</p>}
         </div>
       )}
     </div>

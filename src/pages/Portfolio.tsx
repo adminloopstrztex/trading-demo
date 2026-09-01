@@ -6,6 +6,7 @@ import { useHistoryStore } from '../store/historyStore';
 import TradingChart from '../components/TradingChart';
 import AssetLogo from '../components/AssetLogo';
 import WelcomeBanner from '../components/WelcomeBanner';
+import { useCountUp } from '../hooks/useCountUp';
 
 export default function Portfolio() {
   const assets = useMarketStore((s) => s.assets);
@@ -30,14 +31,15 @@ export default function Portfolio() {
   const first = equityHistory[0]?.value ?? equity;
   const periodChange = equity - first;
   const positive = periodChange >= 0;
+  const animatedEquity = useCountUp(equity);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-6">
       <WelcomeBanner />
       <div>
         <p className="text-sm text-[#8B92A0] mb-1">Hola, {user?.name?.split(' ')[0]}</p>
-        <h1 className="text-[40px] font-semibold text-[#F2F3F5] tracking-tight">
-          ${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <h1 className="text-[40px] font-semibold text-[#F2F3F5] tracking-tight tabular-nums">
+          ${animatedEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </h1>
         <p className={`text-sm font-medium mt-1 ${positive ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>
           {positive ? '+' : ''}${periodChange.toFixed(2)} hoy
