@@ -122,3 +122,43 @@ export function saveUser(user) {
   stmt(UPDATE_SQL).run(c.email, c.role, c.status, c.kyc_status, c.created_at, c.last_active_at, c.data, c.id);
   return user;
 }
+
+// Atomic read-modify-write for a single user. Runs find → mutate → save inside a
+// transaction; since node:sqlite is synchronous and the mutator must be sync too
+// (no awaits), concurrent writes to the same user are serialized with no lost
+// updates. The mutator receives the fresh user and may return:
+//   { error, status?, persist? } — abort (rollback), unless persist:true (commit
+//                                   the mutation anyway, e.g. dropping a bad order)
+//   { ...extra }                 — commit; extras are returned to the caller
+// Returns { notFound } | { user, ...extra } | { error, status?, user }.
+export function updateUser(id, mutator) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const row = stmt('SELECT data FROM users WHERE id = ?').get(id);
+    if (!row) {
+      db.exec('ROLLBACK');
+      return { notFound: true };
+    }
+    const user = JSON.parse(row.data);
+    const out = mutator(user) || {};
+    const commit = () => {
+      const c = cols(user);
+      stmt(UPDATE_SQL).run(c.email, c.role, c.status, c.kyc_status, c.created_at, c.last_active_at, c.data, c.id);
+      db.exec('COMMIT');
+    };
+    if (out.error) {
+      if (out.persist) commit();
+      else db.exec('ROLLBACK');
+      return { ...out, user };
+    }
+    commit();
+    return { user, ...out };
+  } catch (e) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* already rolled back */
+    }
+    throw e;
+  }
+}

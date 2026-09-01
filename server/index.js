@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { load, addUser, saveUser, findUserByEmail, findUserById, getDb } from './store.js';
+import { load, addUser, saveUser, updateUser, findUserByEmail, findUserById, getDb } from './store.js';
 import { isValidSymbol, fetchLivePrice, SYMBOLS } from './market.js';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -271,12 +271,14 @@ app.post(
     if (!Number.isFinite(price) || price <= 0 || price > 1e9)
       return res.status(400).json({ error: 'Precio inválido' });
 
-    const user = req.user;
-    const result = fillOrder(user, symbol, side, quantity, price);
-    if (result.error) return res.status(400).json({ error: result.error });
-    touch(user);
-    saveUser(user);
-    res.json({ account: accountSnapshot(user), executedPrice: price });
+    const r = updateUser(req.user.id, (user) => {
+      const result = fillOrder(user, symbol, side, quantity, price);
+      if (result.error) return { error: result.error };
+      touch(user);
+    });
+    if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (r.error) return res.status(400).json({ error: r.error });
+    res.json({ account: accountSnapshot(r.user), executedPrice: price });
   })
 );
 
@@ -295,22 +297,26 @@ app.post(
     if (!Number.isFinite(targetPrice) || targetPrice <= 0 || targetPrice > 1e9)
       return res.status(400).json({ error: 'Precio objetivo inválido' });
 
-    const user = req.user;
-    user.pendingOrders = user.pendingOrders || [];
-    if (user.pendingOrders.length >= 50) return res.status(400).json({ error: 'Demasiadas órdenes pendientes' });
-    const order = { id: randomUUID(), symbol, side, type, quantity, targetPrice, createdAt: Date.now() };
-    user.pendingOrders = [order, ...user.pendingOrders];
-    touch(user);
-    saveUser(user);
-    res.json({ order, account: accountSnapshot(user) });
+    const r = updateUser(req.user.id, (user) => {
+      user.pendingOrders = user.pendingOrders || [];
+      if (user.pendingOrders.length >= 50) return { error: 'Demasiadas órdenes pendientes' };
+      const order = { id: randomUUID(), symbol, side, type, quantity, targetPrice, createdAt: Date.now() };
+      user.pendingOrders = [order, ...user.pendingOrders];
+      touch(user);
+      return { order };
+    });
+    if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (r.error) return res.status(400).json({ error: r.error });
+    res.json({ order: r.order, account: accountSnapshot(r.user) });
   })
 );
 
 app.delete('/api/account/orders/:id', auth, (req, res) => {
-  const user = req.user;
-  user.pendingOrders = (user.pendingOrders || []).filter((o) => o.id !== req.params.id);
-  saveUser(user);
-  res.json({ account: accountSnapshot(user) });
+  const r = updateUser(req.user.id, (user) => {
+    user.pendingOrders = (user.pendingOrders || []).filter((o) => o.id !== req.params.id);
+  });
+  if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ account: accountSnapshot(r.user) });
 });
 
 // Called by the client's price watcher when a pending order's trigger condition
@@ -320,32 +326,38 @@ app.post(
   '/api/account/orders/:id/execute',
   auth,
   wrap(async (req, res) => {
-    const user = req.user;
-    const order = (user.pendingOrders || []).find((o) => o.id === req.params.id);
-    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    // Read once to learn the order's symbol so we can fetch its live price
+    // (the async part), then re-validate everything atomically inside updateUser.
+    const pre = findUserById(req.user.id);
+    const preOrder = (pre?.pendingOrders || []).find((o) => o.id === req.params.id);
+    if (!preOrder) return res.status(404).json({ error: 'Orden no encontrada' });
 
     let price = Number(req.body?.price);
-    if (SYMBOLS[order.symbol]?.live) {
-      const live = await fetchLivePrice(order.symbol);
+    if (SYMBOLS[preOrder.symbol]?.live) {
+      const live = await fetchLivePrice(preOrder.symbol);
       if (live) price = live;
     }
     if (!Number.isFinite(price) || price <= 0) return res.status(400).json({ error: 'Precio inválido' });
 
-    // verify the trigger actually holds at the authoritative price
-    const triggered = orderTriggered(order, price);
-    if (!triggered) return res.status(409).json({ error: 'La condición aún no se cumple', account: accountSnapshot(user) });
+    const r = updateUser(req.user.id, (user) => {
+      const order = (user.pendingOrders || []).find((o) => o.id === req.params.id);
+      if (!order) return { error: 'Orden no encontrada', status: 404 };
+      // verify the trigger actually holds at the authoritative price
+      if (!orderTriggered(order, price)) return { error: 'La condición aún no se cumple', status: 409 };
 
-    const result = fillOrder(user, order.symbol, order.side, order.quantity, price);
-    if (result.error) {
-      // e.g. insufficient funds when it triggers: drop the order so it doesn't loop
+      const result = fillOrder(user, order.symbol, order.side, order.quantity, price);
+      if (result.error) {
+        // e.g. insufficient funds when it triggers: drop the order so it doesn't loop
+        user.pendingOrders = user.pendingOrders.filter((o) => o.id !== order.id);
+        return { error: result.error, status: 400, persist: true };
+      }
       user.pendingOrders = user.pendingOrders.filter((o) => o.id !== order.id);
-      saveUser(user);
-      return res.status(400).json({ error: result.error, account: accountSnapshot(user) });
-    }
-    user.pendingOrders = user.pendingOrders.filter((o) => o.id !== order.id);
-    touch(user);
-    saveUser(user);
-    res.json({ account: accountSnapshot(user), executedPrice: price });
+      touch(user);
+    });
+
+    if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (r.error) return res.status(r.status || 400).json({ error: r.error, account: accountSnapshot(r.user) });
+    res.json({ account: accountSnapshot(r.user), executedPrice: price });
   })
 );
 
