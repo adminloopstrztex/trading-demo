@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useAccountStore } from './store/accountStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import Toaster from './components/Toaster';
+import CommandPalette from './components/CommandPalette';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
 import AppShell from './components/AppShell';
@@ -65,6 +66,7 @@ export default function App() {
         </Routes>
         </Suspense>
       </ErrorBoundary>
+      <CommandPalette />
       <Toaster />
     </BrowserRouter>
   );
