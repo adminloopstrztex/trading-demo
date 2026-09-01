@@ -1,10 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import type { CrmUser, PagedUsers } from './types';
 import { Avatar, KycBadge, StatusBadge, Skeleton, EmptyState } from './ui';
 import { fmtMoney, timeAgo } from './format';
 import { GOAL_ORDER, GOAL_LABELS, EXPERIENCE_LEVELS } from './survey';
+import { parseCsv, mapRows, CSV_TEMPLATE, type ImportRow } from './importCsv';
+import { toast } from '../../store/toastStore';
+
+interface ImportResult {
+  received: number;
+  inserted: number;
+  skipped: number;
+  invalid: number;
+}
+
+const IMPORT_BATCH = 200;
+
+function downloadTemplate() {
+  const blob = new Blob(['﻿' + CSV_TEMPLATE], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'plantilla-usuarios.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 type ColKey = 'status' | 'kyc' | 'equity' | 'invested' | 'trades' | 'created' | 'lastActive';
 
@@ -106,7 +127,41 @@ export default function AdminUsers() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dense, setDense] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = mapRows(parseCsv(text)).filter((r: ImportRow) => r.name.trim() && r.email.trim());
+      if (rows.length === 0) {
+        toast.error('Nada que importar', 'No se encontraron filas con nombre y email válidos.');
+        return;
+      }
+      const totals = { received: 0, inserted: 0, skipped: 0, invalid: 0 };
+      for (let i = 0; i < rows.length; i += IMPORT_BATCH) {
+        const batch = rows.slice(i, i + IMPORT_BATCH);
+        const res = await api<ImportResult>('/admin/users/import', { method: 'POST', body: { users: batch } });
+        totals.received += res.received;
+        totals.inserted += res.inserted;
+        totals.skipped += res.skipped;
+        totals.invalid += res.invalid;
+      }
+      const detail = `${totals.inserted} creados` +
+        (totals.skipped ? ` · ${totals.skipped} ya existían` : '') +
+        (totals.invalid ? ` · ${totals.invalid} inválidos` : '');
+      if (totals.inserted > 0) toast.success('Importación completa', detail + '. Contraseña por defecto: demo1234');
+      else toast.info('Sin nuevos usuarios', detail || 'Todos ya existían.');
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      toast.error('Error al importar', (e as Error).message);
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
 
   useEffect(() => setPage(1), [q, status, kyc, segment, experience, goal, pageSize]);
 
@@ -220,6 +275,30 @@ export default function AdminUsers() {
             Vista sencilla
           </button>
           <ColumnMenu visible={visible} setVisible={setVisible} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+            }}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="text-xs font-medium rounded-lg border border-[#16C784]/40 text-[#16C784] hover:bg-[#16C784]/10 px-3 py-1.5 disabled:opacity-40"
+          >
+            {importing ? 'Importando…' : 'Importar CSV'}
+          </button>
+          <button
+            onClick={downloadTemplate}
+            className="text-xs font-medium text-[#5B6472] hover:text-[#8B92A0] px-1"
+            title="Descargar plantilla CSV"
+          >
+            plantilla
+          </button>
           <button
             onClick={exportAll}
             disabled={busy || total === 0}

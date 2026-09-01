@@ -117,6 +117,30 @@ export function addUser(user) {
   return user;
 }
 
+// Bulk import: inserts many user documents in one transaction, skipping any whose
+// email already exists. Returns { inserted, skipped }.
+export function importUsers(docs) {
+  let inserted = 0;
+  let skipped = 0;
+  const exists = stmt('SELECT 1 AS x FROM users WHERE email = ?');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const u of docs) {
+      if (exists.get((u.email || '').toLowerCase())) {
+        skipped++;
+        continue;
+      }
+      insertUser(u);
+      inserted++;
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return { inserted, skipped };
+}
+
 export function saveUser(user) {
   const c = cols(user);
   stmt(UPDATE_SQL).run(c.email, c.role, c.status, c.kyc_status, c.created_at, c.last_active_at, c.data, c.id);

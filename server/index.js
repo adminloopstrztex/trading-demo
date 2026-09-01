@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { load, addUser, saveUser, updateUser, findUserByEmail, findUserById, getDb } from './store.js';
+import { load, addUser, saveUser, updateUser, importUsers, findUserByEmail, findUserById, getDb } from './store.js';
 import { isValidSymbol, fetchLivePrice, SYMBOLS } from './market.js';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -558,6 +558,63 @@ app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res
   }
   saveUser(user);
   res.json(crmUser(user));
+});
+
+// Bulk import of customers from a spreadsheet (client parses CSV → sends rows in
+// batches). Creates `user` accounts; passwords are set to a shared default (hashed
+// once, never imported), emails are de-duplicated against existing accounts.
+app.post('/api/admin/users/import', auth, requirePerm('users.moderate'), (req, res) => {
+  const rows = Array.isArray(req.body?.users) ? req.body.users : null;
+  if (!rows) return res.status(400).json({ error: 'Formato inválido: falta "users"' });
+  if (rows.length > 1000) return res.status(400).json({ error: 'Máximo 1000 filas por lote' });
+
+  const dp = typeof req.body?.defaultPassword === 'string' ? req.body.defaultPassword : '';
+  const defaultPassword = dp.length >= 6 ? dp : 'demo1234';
+  const passwordHash = bcrypt.hashSync(defaultPassword, 10); // hashed once, reused for the batch
+
+  const now = Date.now();
+  const errors = [];
+  const docs = [];
+  const seen = new Set();
+
+  rows.forEach((r, i) => {
+    const name = String(r?.name ?? '').trim();
+    const email = String(r?.email ?? '').trim().toLowerCase();
+    if (name.length < 2) return errors.push({ row: i + 1, error: 'Nombre inválido' });
+    if (!EMAIL_RE.test(email)) return errors.push({ row: i + 1, error: `Email inválido (${email || 'vacío'})` });
+    if (seen.has(email)) return errors.push({ row: i + 1, error: `Email repetido en el archivo (${email})` });
+    seen.add(email);
+
+    const status = ['active', 'suspended'].includes(r.status) ? r.status : 'active';
+    const kycStatus = ['none', 'pending', 'verified'].includes(r.kycStatus) ? r.kycStatus : 'none';
+    const balance = Number.isFinite(Number(r.virtualBalance)) ? Number(r.virtualBalance) : STARTING_BALANCE;
+    const createdAt = Number.isFinite(Number(r.createdAt)) ? Number(r.createdAt) : now;
+
+    docs.push({
+      id: randomUUID(),
+      firstName: name.split(' ')[0].slice(0, 40),
+      lastName: name.split(' ').slice(1).join(' ').slice(0, 40),
+      name: name.slice(0, 80),
+      email,
+      phone: String(r?.phone ?? '').trim().slice(0, 20),
+      passwordHash,
+      role: 'user',
+      status,
+      kycStatus,
+      createdAt,
+      lastActiveAt: createdAt,
+      virtualBalance: balance,
+      holdings: [],
+      transactions: [],
+      tags: ['importado'],
+      notes: [],
+      pendingOrders: [],
+      survey: null,
+    });
+  });
+
+  const { inserted, skipped } = importUsers(docs);
+  res.json({ received: rows.length, inserted, skipped, invalid: errors.length, errors: errors.slice(0, 20) });
 });
 
 app.post('/api/admin/users/:id/notes', auth, requirePerm('users.moderate'), (req, res) => {
