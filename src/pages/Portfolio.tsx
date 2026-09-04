@@ -48,7 +48,7 @@ export default function Portfolio() {
 
       <div className="bg-[#101216] rounded-2xl border border-[#1E2128] p-2 flex-1 min-h-[320px]">
         {equityHistory.length > 1 ? (
-          <TradingChart type="area" line={equityHistory} positive={positive} chartKey="equity" />
+          <TradingChart type="area" line={equityHistory} positive={positive} chartKey="equity" secondsVisible />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-[#8B92A0]">
             Cargando datos del mercado…

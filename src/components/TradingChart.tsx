@@ -59,6 +59,7 @@ export default function TradingChart({
   positive,
   chartKey,
   decimals = 2,
+  secondsVisible = false,
 }: {
   type: 'area' | 'candles';
   line?: LinePoint[];
@@ -66,6 +67,7 @@ export default function TradingChart({
   positive: boolean;
   chartKey: string;
   decimals?: number;
+  secondsVisible?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -144,7 +146,7 @@ export default function TradingChart({
       grid: { vertLines: { color: '#15181E' }, horzLines: { color: '#15181E' } },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
-      timeScale: { borderColor: '#1E2128', timeVisible: true, secondsVisible: false, rightOffset: 4 },
+      timeScale: { borderColor: '#1E2128', timeVisible: true, secondsVisible, rightOffset: 4 },
       rightPriceScale: { borderColor: '#1E2128', scaleMargins: { top: 0.12, bottom: 0.12 } },
       crosshair: {
         mode: 1,
