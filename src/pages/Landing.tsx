@@ -567,14 +567,89 @@ function Steps() {
 /*  Honesty band                                                       */
 /* ------------------------------------------------------------------ */
 
-const MARKETS = [
-  { t: 'Criptomonedas', list: 'BTC · ETH · SOL', d: 'Precios en vivo desde Binance', live: true },
-  { t: 'Acciones', list: 'AAPL · TSLA · NVDA', d: 'Las grandes del mercado' },
-  { t: 'Forex', list: 'EUR/USD · GBP/USD', d: 'Los pares más operados' },
-  { t: 'Materias primas', list: 'Oro · Plata · Petróleo', d: 'Cobertura de mercados globales' },
+interface BoardRow {
+  cat: string;
+  sym: string;
+  name: string;
+  liveKey?: string;
+  price: number;
+  chg: number;
+  dec: number;
+}
+const BOARD: BoardRow[] = [
+  { cat: 'Cripto', sym: 'BTC', name: 'Bitcoin', liveKey: 'BTCUSD', price: 67240.1, chg: 3.12, dec: 2 },
+  { cat: 'Cripto', sym: 'ETH', name: 'Ethereum', liveKey: 'ETHUSD', price: 3512.44, chg: 1.87, dec: 2 },
+  { cat: 'Cripto', sym: 'SOL', name: 'Solana', liveKey: 'SOLUSD', price: 178.9, chg: 2.44, dec: 2 },
+  { cat: 'Acciones', sym: 'AAPL', name: 'Apple', price: 224.31, chg: 0.61, dec: 2 },
+  { cat: 'Acciones', sym: 'TSLA', name: 'Tesla', price: 251.08, chg: -1.22, dec: 2 },
+  { cat: 'Acciones', sym: 'NVDA', name: 'NVIDIA', price: 128.44, chg: 2.4, dec: 2 },
+  { cat: 'Forex', sym: 'EUR/USD', name: 'Euro · Dólar', price: 1.0842, chg: -0.08, dec: 4 },
+  { cat: 'Forex', sym: 'GBP/USD', name: 'Libra · Dólar', price: 1.2618, chg: 0.12, dec: 4 },
+  { cat: 'Materias', sym: 'XAU', name: 'Oro', price: 2388.7, chg: 0.35, dec: 2 },
+  { cat: 'Materias', sym: 'WTI', name: 'Petróleo', price: 78.42, chg: -0.54, dec: 2 },
 ];
 
-function Markets() {
+// Deterministic sparkline per symbol (stable across renders; biased to match the trend).
+function sparkPoints(seed: string, up: boolean, W = 76, H = 26, n = 26): string {
+  let a = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    a ^= seed.charCodeAt(i);
+    a = Math.imul(a, 16777619);
+  }
+  const rnd = () => {
+    a = (a * 1664525 + 1013904223) >>> 0;
+    return a / 4294967296;
+  };
+  const vals: number[] = [];
+  let v = 0.5;
+  for (let i = 0; i < n; i++) {
+    v += (rnd() - 0.5) * 0.2 + (up ? 0.012 : -0.012);
+    v = Math.max(0.1, Math.min(0.9, v));
+    vals.push(v);
+  }
+  const max = Math.max(...vals);
+  const min = Math.min(...vals);
+  const rng = max - min || 1;
+  return vals.map((x, i) => `${((i / (n - 1)) * W).toFixed(1)},${(H - ((x - min) / rng) * H).toFixed(1)}`).join(' ');
+}
+
+function BoardRowView({ r, live }: { r: BoardRow; live?: Stat }) {
+  const price = live ? live.price : r.price;
+  const chg = live ? live.changePct : r.chg;
+  const up = chg >= 0;
+  const color = up ? '#16C784' : '#FF5C5C';
+  return (
+    <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-white/[0.02] sm:grid-cols-[1.4fr_auto_88px_92px]">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#16C784]/10 font-mono text-xs font-semibold text-[#16C784]">
+          {r.sym.slice(0, 2)}
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-[#F2F3F5]">{r.sym}</span>
+            {live && (
+              <span className="h-1.5 w-1.5 rounded-full bg-[#16C784] strx-pulse" title="En vivo" />
+            )}
+          </div>
+          <div className="truncate text-xs text-[#8B92A0]">{r.name}</div>
+        </div>
+      </div>
+      <svg viewBox="0 0 76 26" className="hidden h-6 w-[76px] sm:block" aria-hidden preserveAspectRatio="none">
+        <polyline points={sparkPoints(r.sym, up)} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+      </svg>
+      <div className="hidden text-right font-mono text-sm text-[#F2F3F5] sm:block">
+        {price.toLocaleString('en-US', { minimumFractionDigits: r.dec, maximumFractionDigits: r.dec })}
+      </div>
+      <div className="text-right font-mono text-sm font-medium" style={{ color }}>
+        {up ? '+' : ''}
+        {chg.toFixed(2)}%
+      </div>
+    </div>
+  );
+}
+
+function Markets({ live }: { live: Record<string, Stat> }) {
+  const cats = ['Cripto', 'Acciones', 'Forex', 'Materias'];
   return (
     <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal>
@@ -583,29 +658,42 @@ function Markets() {
             Todos los mercados, en un solo lugar.
           </h2>
           <p className="max-w-xs text-sm leading-relaxed text-[#8B92A0]">
-            Diversifica entre clases de activos sin cambiar de plataforma.
+            Cripto, acciones, forex y materias primas — diversifica sin cambiar de plataforma.
           </p>
         </div>
       </Reveal>
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {MARKETS.map((m, i) => (
-          <Reveal key={m.t} delay={i * 70}>
-            <div className="group h-full rounded-2xl border border-[#1E2128] bg-[#101216] p-6 transition hover:border-[#262A33]">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-[#F2F3F5]">{m.t}</h3>
-                {m.live && (
-                  <span className="inline-flex items-center gap-1 rounded bg-[#16C784]/12 px-1.5 py-0.5 text-[9px] font-semibold text-[#16C784]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#16C784] strx-pulse" />
-                    EN VIVO
+
+      <Reveal delay={80}>
+        <div className="mt-10 overflow-hidden rounded-2xl border border-[#1E2128] bg-[#101216]">
+          <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-[#1E2128] px-4 py-2.5 text-[10px] font-medium uppercase tracking-wide text-[#5B6472] sm:grid-cols-[1.4fr_auto_88px_92px]">
+            <span>Instrumento</span>
+            <span className="hidden text-right sm:block">Tendencia</span>
+            <span className="hidden text-right sm:block">Precio</span>
+            <span className="text-right">24h</span>
+          </div>
+          {cats.map((cat) => (
+            <div key={cat}>
+              <div className="border-b border-[#15181E] bg-[#0D0F13] px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#5B6472]">
+                {cat === 'Materias' ? 'Materias primas' : cat}
+                {cat === 'Cripto' && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-[9px] font-semibold text-[#16C784]">
+                    <span className="h-1 w-1 rounded-full bg-[#16C784] strx-pulse" /> en vivo
                   </span>
                 )}
               </div>
-              <p className="mt-3 font-mono text-sm text-[#B8BFCC]">{m.list}</p>
-              <p className="mt-1.5 text-xs text-[#8B92A0]">{m.d}</p>
+              {BOARD.filter((r) => r.cat === cat).map((r) => (
+                <div key={r.sym} className="border-b border-[#15181E] last:border-0">
+                  <BoardRowView r={r} live={r.liveKey ? live[r.liveKey] : undefined} />
+                </div>
+              ))}
             </div>
-          </Reveal>
-        ))}
-      </div>
+          ))}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-[#5B6472]">
+            <span><span className="font-mono text-[#8B92A0]">40+</span> instrumentos disponibles</span>
+            <span>Cripto con precios reales desde Binance</span>
+          </div>
+        </div>
+      </Reveal>
     </section>
   );
 }
@@ -718,7 +806,7 @@ export default function Landing() {
         <Hero live={live} />
         <Tape live={live.stats} />
         <Features />
-        <Markets />
+        <Markets live={live.stats} />
         <Steps />
         <Faq />
         <FinalCta />
