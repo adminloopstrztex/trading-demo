@@ -1,6 +1,54 @@
-import { useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../components/Logo';
+import { fetchCryptoCandles, fetchCrypto24h } from '../data/cryptoFeed';
+
+interface OHLC {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+interface Stat {
+  price: number;
+  changePct: number;
+}
+
+function fmtUsd(n: number, dec = 2) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+// Pulls real BTC data from Binance for the hero; faux data stays as the fallback
+// so the marketing page never breaks if the network/API is unavailable.
+function useLiveMarket() {
+  const [candles, setCandles] = useState<OHLC[] | null>(null);
+  const [stats, setStats] = useState<Record<string, Stat>>({});
+
+  useEffect(() => {
+    let alive = true;
+    fetchCryptoCandles('BTCUSD', 1)
+      .then((c) => {
+        if (alive && c.length)
+          setCandles(c.map((k) => ({ open: k.open, high: k.high, low: k.low, close: k.close })));
+      })
+      .catch(() => {});
+
+    const pull = () =>
+      fetchCrypto24h(['BTCUSD', 'ETHUSD', 'SOLUSD'])
+        .then((st) => {
+          if (alive && Object.keys(st).length) setStats(st);
+        })
+        .catch(() => {});
+    pull();
+    const id = setInterval(pull, 8000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  return { candles, stats, btc: stats.BTCUSD ?? null };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Motion helpers                                                     */
@@ -82,24 +130,27 @@ const CANDLES: [number, number, number, number][] = [
   [122, 123, 117, 119], [119, 127, 118, 126], [126, 131, 125, 130], [130, 134, 128, 133],
 ];
 
-function CandleChart() {
+const FAUX_CANDLES: OHLC[] = CANDLES.map(([open, high, low, close]) => ({ open, high, low, close }));
+
+function CandleChart({ candles = FAUX_CANDLES }: { candles?: OHLC[] }) {
   const W = 520;
   const H = 210;
   const padY = 14;
-  const highs = CANDLES.map((c) => c[1]);
-  const lows = CANDLES.map((c) => c[2]);
+  const highs = candles.map((c) => c.high);
+  const lows = candles.map((c) => c.low);
   const max = Math.max(...highs);
   const min = Math.min(...lows);
-  const step = W / CANDLES.length;
+  const range = max - min || 1;
+  const step = W / candles.length;
   const bodyW = step * 0.56;
-  const y = (v: number) => padY + ((max - v) / (max - min)) * (H - padY * 2);
+  const y = (v: number) => padY + ((max - v) / range) * (H - padY * 2);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto strx-draw" role="img" aria-label="Gráfico de velas de BTC con tendencia alcista">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto strx-draw" role="img" aria-label="Gráfico de velas de BTC">
       {[0.25, 0.5, 0.75].map((f) => (
         <line key={f} x1="0" x2={W} y1={padY + f * (H - padY * 2)} y2={padY + f * (H - padY * 2)} stroke="#15181E" strokeWidth="1" />
       ))}
-      {CANDLES.map(([o, h, l, c], i) => {
+      {candles.map(({ open: o, high: h, low: l, close: c }, i) => {
         const up = c >= o;
         const color = up ? '#16C784' : '#FF5C5C';
         const cx = i * step + step / 2;
@@ -198,7 +249,11 @@ function NavBar() {
 /*  Hero                                                               */
 /* ------------------------------------------------------------------ */
 
-function Hero() {
+function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, Stat>; btc: Stat | null } }) {
+  const btc = live.btc;
+  const up = btc ? btc.changePct >= 0 : true;
+  const priceStr = btc ? `$${fmtUsd(btc.price)}` : '$67,240.10';
+  const changeStr = btc ? `${up ? '+' : ''}${btc.changePct.toFixed(2)}% hoy` : '+3.12% hoy';
   return (
     <section className="relative overflow-hidden">
       {/* ambient glow + grid */}
@@ -293,13 +348,13 @@ function Hero() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-mono text-lg font-semibold text-[#F2F3F5]">$67,240.10</div>
-                <div className="font-mono text-xs font-medium text-[#16C784]">+3.12% hoy</div>
+                <div className="font-mono text-lg font-semibold text-[#F2F3F5]">{priceStr}</div>
+                <div className={`font-mono text-xs font-medium ${up ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>{changeStr}</div>
               </div>
             </div>
 
             <div className="mt-4">
-              <CandleChart />
+              <CandleChart candles={live.candles ?? undefined} />
             </div>
 
             <div className="mt-3 flex gap-1">
@@ -361,8 +416,15 @@ function BrowserFrame({ url, children }: { url: string; children: ReactNode }) {
 /*  Ticker tape                                                        */
 /* ------------------------------------------------------------------ */
 
-function Tape() {
-  const items = [...TAPE, ...TAPE];
+const TAPE_KEY: Record<string, string> = { BTC: 'BTCUSD', ETH: 'ETHUSD', SOL: 'SOLUSD' };
+
+function Tape({ live }: { live: Record<string, Stat> }) {
+  const merged = TAPE.map((t) => {
+    const st = TAPE_KEY[t.s] ? live[TAPE_KEY[t.s]] : undefined;
+    if (!st) return t;
+    return { ...t, p: fmtUsd(st.price), c: `${st.changePct >= 0 ? '+' : ''}${st.changePct.toFixed(2)}%`, up: st.changePct >= 0 };
+  });
+  const items = [...merged, ...merged];
   return (
     <div className="relative overflow-hidden border-y border-[#1E2128] bg-[#0F1115] py-3">
       <div className="strx-marquee flex w-max gap-8" style={{ '--marquee-dur': '46s' } as CSSProperties}>
@@ -648,12 +710,13 @@ function Footer() {
 
 export default function Landing() {
   useJsMotion();
+  const live = useLiveMarket();
   return (
     <div className="min-h-screen bg-[#0A0B0D] text-[#F2F3F5]">
       <NavBar />
       <main>
-        <Hero />
-        <Tape />
+        <Hero live={live} />
+        <Tape live={live.stats} />
         <Features />
         <Markets />
         <Steps />

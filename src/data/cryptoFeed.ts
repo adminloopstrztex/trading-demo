@@ -37,6 +37,26 @@ export async function fetchCryptoPrices(symbols: string[]): Promise<Record<strin
   return out;
 }
 
+// 24h price + change % per symbol (Binance /ticker/24hr).
+export async function fetchCrypto24h(
+  symbols: string[]
+): Promise<Record<string, { price: number; changePct: number }>> {
+  const pairs = symbols.map((s) => PAIR[s]).filter(Boolean);
+  if (pairs.length === 0) return {};
+  const param = encodeURIComponent(JSON.stringify(pairs));
+  const res = await fetch(`${BASE}/ticker/24hr?symbols=${param}`);
+  if (!res.ok) throw new Error(`Binance 24hr ${res.status}`);
+  const json = (await res.json()) as { symbol: string; lastPrice: string; priceChangePercent: string }[];
+  const pairToSymbol: Record<string, string> = {};
+  for (const s of symbols) if (PAIR[s]) pairToSymbol[PAIR[s]] = s;
+  const out: Record<string, { price: number; changePct: number }> = {};
+  for (const row of json) {
+    const sym = pairToSymbol[row.symbol];
+    if (sym) out[sym] = { price: parseFloat(row.lastPrice), changePct: parseFloat(row.priceChangePercent) };
+  }
+  return out;
+}
+
 export async function fetchCryptoCandles(symbol: string, days: number): Promise<Candle[]> {
   const pair = PAIR[symbol];
   if (!pair) return [];
