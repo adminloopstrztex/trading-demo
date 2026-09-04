@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Type system: Geist (grotesca precisa) + Geist Mono para datos — "terminal premium". */
+@theme {
+  --font-sans: 'Geist', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+}
+
 :root {
   color-scheme: dark;
 
@@ -23,8 +29,9 @@ body {
   margin: 0;
   background: #0a0b0d;
   color: #f2f3f5;
-  font-family: -apple-system, 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
