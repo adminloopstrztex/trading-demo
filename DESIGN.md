@@ -31,7 +31,7 @@ Estrategia: **Restrained** (neutros + un acento por superficie).
 
 ## Typography
 
-Una sola familia: stack de sistema (`-apple-system, Inter, system-ui, Segoe UI, Roboto`). Escala fija en rem/px (no fluida): números grandes para cifras clave (28–40px), 13–16px para cuerpo/labels, 10–11px para metadatos en mayúsculas suaves. Peso 400/500/600. Fuente monoespaciada del sistema para precios/valores donde ayuda la alineación.
+Dirección: **"terminal premium"**. Familia UI: **Geist** (grotesca precisa; token `--font-sans`, Google Fonts). Datos/cifras: **Geist Mono** (token `--font-mono`) para precios, tickers y valores donde la alineación ayuda — la firma del look de mesa de trading. Escala fija en rem/px (no fluida) salvo el hero de la landing (`clamp()`): números grandes para cifras clave (28–40px), 13–16px para cuerpo/labels, 10–11px para metadatos en mayúsculas suaves. Peso 400/500/600. Tracking display ≥ -0.03em (no más apretado). Definido en `@theme` de Tailwind v4 (index.css) + `<link>` en index.html.
 
 ## Components
 
