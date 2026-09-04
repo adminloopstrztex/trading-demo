@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMarketStore } from '../store/marketStore';
 import { useAccountStore } from '../store/accountStore';
-import TradingViewChart from '../components/TradingViewChart';
+import TradingChart from '../components/TradingChart';
 import Price from '../components/Price';
 import { toast } from '../store/toastStore';
 import type { Asset, AssetCategory } from '../types';
@@ -13,27 +13,6 @@ const CATEGORIES: { key: AssetCategory | 'all'; label: string }[] = [
   { key: 'stock', label: 'Acciones' },
   { key: 'metal', label: 'Metales' },
 ];
-
-// Our symbols → TradingView symbols (the widget shows TradingView's own data).
-const TV_SYMBOLS: Record<string, string> = {
-  BTCUSD: 'BINANCE:BTCUSDT',
-  ETHUSD: 'BINANCE:ETHUSDT',
-  SOLUSD: 'BINANCE:SOLUSDT',
-  EURUSD: 'FX:EURUSD',
-  GBPUSD: 'FX:GBPUSD',
-  USDJPY: 'FX:USDJPY',
-  USDCHF: 'FX:USDCHF',
-  USDCAD: 'FX:USDCAD',
-  AUDUSD: 'FX:AUDUSD',
-  NZDUSD: 'FX:NZDUSD',
-  EURGBP: 'FX:EURGBP',
-  EURJPY: 'FX:EURJPY',
-  GBPJPY: 'FX:GBPJPY',
-  AAPL: 'NASDAQ:AAPL',
-  TSLA: 'NASDAQ:TSLA',
-  NVDA: 'NASDAQ:NVDA',
-  XAUUSD: 'OANDA:XAUUSD',
-};
 
 function decimalsFor(a: Asset): number {
   if (a.category === 'forex') return a.symbol.includes('JPY') ? 3 : 5;
@@ -53,6 +32,7 @@ export default function Terminal() {
 
   const [cat, setCat] = useState<AssetCategory | 'all'>('all');
   const [q, setQ] = useState('');
+  const [chartType, setChartType] = useState<'candles' | 'area'>('candles');
 
   const list = useMemo(
     () =>
@@ -73,7 +53,7 @@ export default function Terminal() {
   const first = asset.candles[0];
   const positive = first ? asset.price >= first.close : true;
   const changePct = first ? ((asset.price - first.close) / first.close) * 100 : 0;
-  const tvSymbol = TV_SYMBOLS[asset.symbol] ?? asset.symbol;
+  const linePoints = asset.candles.map((c) => ({ time: c.time, value: c.close }));
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-3">
@@ -145,11 +125,31 @@ export default function Terminal() {
                 {changePct.toFixed(2)}%
               </span>
             </div>
-            <span className="text-[10px] text-[#5B6472]">Gráfico: TradingView (datos de referencia)</span>
+            <div className="flex gap-1 bg-[#1A1D23] rounded-lg p-0.5">
+              {(['candles', 'area'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setChartType(t)}
+                  aria-pressed={chartType === t}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    chartType === t ? 'bg-[#262A33] text-[#F2F3F5]' : 'text-[#8B92A0] hover:text-[#F2F3F5]'
+                  }`}
+                >
+                  {t === 'candles' ? 'Velas' : 'Línea'}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 min-h-0">
-            <TradingViewChart symbol={tvSymbol} />
+            <TradingChart
+              type={chartType}
+              candles={asset.candles}
+              line={linePoints}
+              positive={positive}
+              chartKey={asset.symbol}
+              decimals={dec}
+            />
           </div>
 
           <TradeBar symbol={asset.symbol} bid={bid} ask={ask} dec={dec} price={asset.price} />
