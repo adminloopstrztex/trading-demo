@@ -313,6 +313,20 @@ function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, 
             </a>
           </div>
 
+          <div
+            className="strx-rise mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#8B92A0]"
+            style={{ '--rise-delay': '300ms' } as CSSProperties}
+          >
+            {['Sin tarjeta de crédito', 'Gratis para siempre', 'Datos reales de mercado'].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-[#16C784]">
+                  <path d="M5 12l4 4L19 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t}
+              </span>
+            ))}
+          </div>
+
           <dl
             className="strx-rise mt-10 flex flex-wrap gap-x-8 gap-y-4 border-t border-[#1E2128] pt-6"
             style={{ '--rise-delay': '320ms' } as CSSProperties}
@@ -737,6 +751,161 @@ function Faq() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Product showcase (portfolio dashboard mock)                        */
+/* ------------------------------------------------------------------ */
+
+function AreaMini() {
+  const closes = FAUX_CANDLES.map((c) => c.close);
+  const W = 560;
+  const H = 150;
+  const max = Math.max(...closes);
+  const min = Math.min(...closes);
+  const rng = max - min || 1;
+  const pts = closes.map((v, i) => `${((i / (closes.length - 1)) * W).toFixed(1)},${(H - ((v - min) / rng) * (H - 12) - 6).toFixed(1)}`);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#16C784" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#16C784" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,${H} ${pts.join(' ')} ${W},${H}`} fill="url(#eqfill)" />
+      <polyline points={pts.join(' ')} fill="none" stroke="#16C784" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Showcase() {
+  return (
+    <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
+      <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
+        <Reveal>
+          <h2 className="max-w-md text-[clamp(1.75rem,4vw,2.75rem)] font-semibold tracking-[-0.02em] text-[#F2F3F5]" style={{ textWrap: 'balance' }}>
+            Tu portafolio, vivo a cada segundo.
+          </h2>
+          <p className="mt-4 max-w-md text-[16px] leading-relaxed text-[#B8BFCC]">
+            Patrimonio, efectivo, rendimiento y posiciones se recalculan con cada movimiento del
+            mercado. Sabes exactamente cómo vas, siempre.
+          </p>
+          <ul className="mt-6 space-y-3">
+            {[
+              'P&L en tiempo real por posición y total',
+              'Historial completo de operaciones y órdenes',
+              'Curva de patrimonio para seguir tu progreso',
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-2.5 text-sm text-[#B8BFCC]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="mt-0.5 shrink-0 text-[#16C784]">
+                  <path d="M5 12l4 4L19 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+
+        <Reveal delay={100}>
+          <BrowserFrame url="stratex.app/app">
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-xs text-[#8B92A0]">Tu patrimonio</div>
+                <div className="mt-1 font-mono text-3xl font-semibold text-[#F2F3F5]">$12,480.34</div>
+                <div className="font-mono text-sm font-medium text-[#16C784]">+$2,480.34 (24.8%)</div>
+              </div>
+              <div className="hidden gap-1 sm:flex">
+                {['1D', '1S', '1M', '1A'].map((r, i) => (
+                  <span key={r} className={`rounded-md px-2 py-1 text-[11px] font-medium ${i === 2 ? 'bg-[#16C784]/15 text-[#16C784]' : 'text-[#8B92A0]'}`}>{r}</span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4">
+              <AreaMini />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {[
+                ['Efectivo', '$7,519.66'],
+                ['Invertido', '$4,960.68'],
+                ['Hoy', '+$312.40'],
+              ].map(([l, v], i) => (
+                <div key={l} className="rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wide text-[#5B6472]">{l}</div>
+                  <div className={`mt-0.5 font-mono text-sm font-medium ${i === 2 ? 'text-[#16C784]' : 'text-[#F2F3F5]'}`}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 space-y-1.5 border-t border-[#1E2128] pt-4">
+              {[
+                ['BTC', 'Bitcoin', '0.05', '+12.4%', true],
+                ['AAPL', 'Apple', '18', '+3.1%', true],
+                ['ETH', 'Ethereum', '1.2', '-1.8%', false],
+              ].map(([sym, name, qty, pnl, up]) => (
+                <div key={sym as string} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-white/[0.02]">
+                  <div className="flex items-center gap-2.5">
+                    <Coin symbol={sym as string} size={28} />
+                    <div>
+                      <div className="text-xs font-medium text-[#F2F3F5]">{sym}</div>
+                      <div className="text-[10px] text-[#8B92A0]">{name}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-xs text-[#B8BFCC]">{qty} u.</div>
+                    <div className={`font-mono text-xs font-medium ${up ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>{pnl}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </BrowserFrame>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Trust / value band                                                 */
+/* ------------------------------------------------------------------ */
+
+const VALUES: [string, string][] = [
+  ['Datos reales de mercado', 'Criptomonedas en vivo desde Binance; acciones, forex y materias primas en movimiento continuo.'],
+  ['Órdenes profesionales', 'Mercado, límite y stop, con ejecución automática al alcanzar tu precio objetivo.'],
+  ['Gráficos de nivel pro', 'Velas japonesas con herramientas de dibujo ancladas a precio y tiempo, como en las plataformas reales.'],
+  ['100% saldo virtual', 'Empiezas con $10,000 de práctica. Sin depósitos, sin comisiones y sin arriesgar dinero real.'],
+];
+
+function TrustBand() {
+  return (
+    <section className="border-y border-[#1E2128] bg-[#0F1115]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-20 sm:px-8 sm:py-24 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+        <Reveal>
+          <h2 className="text-[clamp(1.75rem,4vw,2.75rem)] font-semibold tracking-[-0.02em] text-[#F2F3F5]" style={{ textWrap: 'balance' }}>
+            Practica como en el mercado real.
+          </h2>
+          <p className="mt-4 max-w-sm text-[16px] leading-relaxed text-[#B8BFCC]">
+            Las mismas herramientas que usa un operador profesional, sin poner en riesgo tu dinero.
+            Aprendes haciendo, con datos reales.
+          </p>
+        </Reveal>
+        <Reveal delay={100}>
+          <div className="divide-y divide-[#1E2128] border-y border-[#1E2128]">
+            {VALUES.map(([t, d], i) => (
+              <div key={t} className="flex gap-4 py-5">
+                <span className="mt-0.5 font-mono text-sm font-semibold text-[#16C784]">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-[#F2F3F5]">{t}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-[#8B92A0]">{d}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Final CTA + footer                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -766,29 +935,76 @@ function FinalCta() {
   );
 }
 
+const FOOTER_COLS: { title: string; links: [string, string][] }[] = [
+  {
+    title: 'Producto',
+    links: [
+      ['Portafolio', '/login'],
+      ['Invertir', '/login'],
+      ['Terminal', '/login'],
+      ['Órdenes', '/login'],
+    ],
+  },
+  {
+    title: 'Plataforma',
+    links: [
+      ['Cómo funciona', '#como-funciona'],
+      ['Mercados', '#producto'],
+      ['Preguntas', '#faq'],
+      ['Crear cuenta', '/login'],
+    ],
+  },
+  {
+    title: 'Mercados',
+    links: [
+      ['Criptomonedas', '#producto'],
+      ['Acciones', '#producto'],
+      ['Forex', '#producto'],
+      ['Materias primas', '#producto'],
+    ],
+  },
+];
+
 function Footer() {
   return (
     <footer className="border-t border-[#1E2128] bg-[#0F1115]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div>
           <Logo />
-          <p className="mt-3 max-w-xs text-xs leading-relaxed text-[#8B92A0]">
-            Opera cripto, acciones, forex y materias primas en tiempo real. Órdenes avanzadas, fondos
-            de práctica y sin comisiones.
+          <p className="mt-4 max-w-xs text-sm leading-relaxed text-[#8B92A0]">
+            Aprende a operar en cripto, acciones, forex y materias primas con datos reales y $10,000
+            en fondos de práctica. Sin comisiones, sin riesgo.
+          </p>
+          <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-1.5 text-xs text-[#8B92A0]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#16C784] strx-pulse" />
+            Datos cripto en vivo · Binance
+          </div>
+        </div>
+        {FOOTER_COLS.map((col) => (
+          <div key={col.title}>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#5B6472]">{col.title}</h3>
+            <ul className="mt-4 space-y-2.5">
+              {col.links.map(([label, href]) => (
+                <li key={label}>
+                  {href.startsWith('#') ? (
+                    <a href={href} className="text-sm text-[#B8BFCC] transition hover:text-[#F2F3F5]">{label}</a>
+                  ) : (
+                    <Link to={href} className="text-sm text-[#B8BFCC] transition hover:text-[#F2F3F5]">{label}</Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-[#1E2128] px-5 py-6 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-[#5B6472]">© 2026 Stratex · Simulador educativo</p>
+          <p className="max-w-xl text-xs leading-relaxed text-[#5B6472]">
+            Las operaciones se realizan con fondos de práctica (virtuales). Stratex no constituye
+            asesoría de inversión; invertir en los mercados reales conlleva riesgos.
           </p>
         </div>
-        <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm text-[#8B92A0]">
-          <a href="#producto" className="transition hover:text-[#F2F3F5]">Producto</a>
-          <a href="#como-funciona" className="transition hover:text-[#F2F3F5]">Cómo funciona</a>
-          <a href="#faq" className="transition hover:text-[#F2F3F5]">Preguntas</a>
-          <Link to="/login" className="transition hover:text-[#F2F3F5]">Entrar</Link>
-        </div>
-      </div>
-      <div className="border-t border-[#1E2128] px-5 py-5 sm:px-8">
-        <p className="mx-auto max-w-6xl text-xs leading-relaxed text-[#5B6472]">
-          © 2026 Stratex. Las operaciones se realizan con fondos de práctica (virtuales). Stratex no
-          constituye asesoría de inversión; invertir en los mercados conlleva riesgos.
-        </p>
       </div>
     </footer>
   );
@@ -806,8 +1022,10 @@ export default function Landing() {
         <Hero live={live} />
         <Tape live={live.stats} />
         <Features />
+        <Showcase />
         <Markets live={live.stats} />
         <Steps />
+        <TrustBand />
         <Faq />
         <FinalCta />
       </main>
