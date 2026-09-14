@@ -6,6 +6,7 @@ import type { CrmUserDetail, CrmUser, Note } from './types';
 import { Avatar, KycBadge, StatusBadge, Skeleton } from './ui';
 import { timeAgo } from './format';
 import { GOAL_LABELS } from './survey';
+import { toast } from '../../store/toastStore';
 
 export default function AdminUserDetail() {
   const { id = '' } = useParams();
@@ -18,6 +19,9 @@ export default function AdminUserDetail() {
   const [error, setError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [tagBusy, setTagBusy] = useState(false);
+  const [allTags, setAllTags] = useState<string[]>([]);
 
   function reload() {
     api<CrmUserDetail>(`/admin/users/${id}`)
@@ -44,6 +48,43 @@ export default function AdminUserDetail() {
     });
     setNoteText('');
     setU((prev) => (prev ? { ...prev, notes: [note, ...prev.notes] } : prev));
+  }
+
+  // Tag catalog for suggestions (any CRM member can read/write tags).
+  useEffect(() => {
+    api<{ tag: string; count: number }[]>('/admin/tags')
+      .then((list) => setAllTags(list.map((t) => t.tag)))
+      .catch(() => {});
+  }, []);
+
+  async function addTag(raw: string) {
+    const tag = raw.trim();
+    if (!tag || tagBusy) return;
+    setTagBusy(true);
+    try {
+      const { tags } = await api<{ tags: string[] }>(`/admin/users/${id}/tags`, {
+        method: 'POST',
+        body: { tag },
+      });
+      setU((prev) => (prev ? { ...prev, tags } : prev));
+      setAllTags((prev) => (prev.includes(tag) ? prev : [tag, ...prev]));
+      setTagInput('');
+    } catch (e) {
+      toast.error('No se pudo añadir la etiqueta', (e as Error).message);
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  async function removeTag(tag: string) {
+    try {
+      const { tags } = await api<{ tags: string[] }>(`/admin/users/${id}/tags/${encodeURIComponent(tag)}`, {
+        method: 'DELETE',
+      });
+      setU((prev) => (prev ? { ...prev, tags } : prev));
+    } catch (e) {
+      toast.error('No se pudo quitar la etiqueta', (e as Error).message);
+    }
   }
 
   async function promoteToStaff(role: 'support' | 'viewer' | 'admin') {
@@ -230,14 +271,69 @@ export default function AdminUserDetail() {
 
           <Card title="Etiquetas">
             {u.tags.length === 0 ? (
-              <Empty>Sin etiquetas.</Empty>
+              <p className="text-sm text-[#5B6472]">Sin etiquetas. Añade una para identificar al cliente.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {u.tags.map((t) => (
-                  <span key={t} className="text-xs text-[#B8BFCC] bg-[#1E2128] rounded-md px-2 py-1">
+                  <span key={t} className="group inline-flex items-center gap-1 text-xs text-[#B8BFCC] bg-[#1E2128] rounded-md pl-2 pr-1 py-1">
                     {t}
+                    <button
+                      onClick={() => removeTag(t)}
+                      aria-label={`Quitar etiqueta ${t}`}
+                      className="grid h-4 w-4 place-items-center rounded text-[#5B6472] hover:bg-[#FF5C5C]/20 hover:text-[#FF5C5C]"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            <div className="mt-3 flex gap-2">
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTag(tagInput);
+                  }
+                }}
+                maxLength={24}
+                placeholder="Nueva etiqueta…"
+                aria-label="Nueva etiqueta"
+                className="flex-1 rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] placeholder:text-[#5B6472] focus:outline-none focus:border-[#3B82F6]"
+              />
+              <button
+                onClick={() => addTag(tagInput)}
+                disabled={tagBusy || !tagInput.trim()}
+                className="rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] disabled:opacity-40 text-white text-sm font-medium px-3.5"
+              >
+                Añadir
+              </button>
+            </div>
+
+            {allTags.filter((t) => !u.tags.some((x) => x.toLowerCase() === t.toLowerCase())).length > 0 && (
+              <div className="mt-3">
+                <div className="text-[11px] text-[#5B6472] mb-1.5">Sugerencias</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {allTags
+                    .filter((t) => !u.tags.some((x) => x.toLowerCase() === t.toLowerCase()))
+                    .slice(0, 10)
+                    .map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => addTag(t)}
+                        disabled={tagBusy}
+                        className="inline-flex items-center gap-1 rounded-md border border-[#262A33] px-2 py-1 text-xs text-[#8B92A0] hover:border-[#3B82F6]/50 hover:text-[#F2F3F5] disabled:opacity-40"
+                      >
+                        <span className="text-[#5B6472]">+</span>
+                        {t}
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
           </Card>

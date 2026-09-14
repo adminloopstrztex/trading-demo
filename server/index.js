@@ -560,6 +560,47 @@ app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res
   res.json(crmUser(user));
 });
 
+// ---- etiquetas de cliente (cualquier miembro del CRM: crm.view) ----
+// Etiquetas libres para identificar/categorizar clientes. Escritura atómica.
+app.post('/api/admin/users/:id/tags', auth, requirePerm('crm.view'), (req, res) => {
+  const raw = typeof req.body?.tag === 'string' ? req.body.tag.trim().replace(/\s+/g, ' ').slice(0, 24) : '';
+  if (!raw) return res.status(400).json({ error: 'Etiqueta vacía' });
+  const r = updateUser(req.params.id, (user) => {
+    if (user.role !== 'user') return { error: 'No encontrado', status: 404 };
+    const tags = user.tags || [];
+    if (tags.some((t) => t.toLowerCase() === raw.toLowerCase())) return { error: 'La etiqueta ya existe', status: 409 };
+    if (tags.length >= 20) return { error: 'Máximo 20 etiquetas', status: 400 };
+    user.tags = [...tags, raw];
+  });
+  if (r.notFound) return res.status(404).json({ error: 'No encontrado' });
+  if (r.error) return res.status(r.status || 400).json({ error: r.error });
+  res.json({ tags: r.user.tags });
+});
+
+app.delete('/api/admin/users/:id/tags/:tag', auth, requirePerm('crm.view'), (req, res) => {
+  const tag = decodeURIComponent(req.params.tag);
+  const r = updateUser(req.params.id, (user) => {
+    if (user.role !== 'user') return { error: 'No encontrado', status: 404 };
+    user.tags = (user.tags || []).filter((t) => t.toLowerCase() !== tag.toLowerCase());
+  });
+  if (r.notFound) return res.status(404).json({ error: 'No encontrado' });
+  if (r.error) return res.status(r.status || 400).json({ error: r.error });
+  res.json({ tags: r.user.tags });
+});
+
+// Catálogo de etiquetas existentes con conteo (para sugerencias/autocompletado).
+app.get('/api/admin/tags', auth, requirePerm('crm.view'), (_req, res) => {
+  const counts = {};
+  for (const u of getDb().users) {
+    if (u.role !== 'user') continue;
+    for (const t of u.tags || []) counts[t] = (counts[t] || 0) + 1;
+  }
+  const tags = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag, count]) => ({ tag, count }));
+  res.json(tags);
+});
+
 // Bulk import of customers from a spreadsheet (client parses CSV → sends rows in
 // batches). Creates `user` accounts; passwords are set to a shared default (hashed
 // once, never imported), emails are de-duplicated against existing accounts.
