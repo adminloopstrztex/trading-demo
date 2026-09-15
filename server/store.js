@@ -17,7 +17,9 @@ import { seedData } from './seed.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEMORY = process.env.STRATEX_MEMORY === '1'; // tests: fresh in-memory DB
-const DB_FILE = MEMORY ? ':memory:' : join(__dirname, 'stratex.db');
+// En producción (Railway) apuntar a un disco persistente vía STRATEX_DB_PATH,
+// p. ej. /data/stratex.db; en local usa el archivo junto al servidor.
+const DB_FILE = MEMORY ? ':memory:' : process.env.STRATEX_DB_PATH || join(__dirname, 'stratex.db');
 
 let db = null;
 const stmtCache = new Map();

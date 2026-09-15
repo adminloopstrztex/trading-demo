@@ -1,5 +1,9 @@
 const TOKEN_KEY = 'stratex-token';
 
+// En dev usa el proxy de Vite (/api). En producción, VITE_API_URL apunta al
+// backend real, p. ej. https://api.stratex.capital/api
+const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -13,7 +17,7 @@ export async function api<T = unknown>(
   options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
   const token = getToken();
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       'Content-Type': 'application/json',
