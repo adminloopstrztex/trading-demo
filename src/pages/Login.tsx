@@ -206,13 +206,16 @@ export default function Login() {
           </p>
         </form>
 
-        <div className="mt-4 text-[11px] text-[#5B6472] text-center leading-relaxed">
-          Acceso admin (CRM): <span className="text-[#8B92A0]">admin@stratex.com</span> /{' '}
-          <span className="text-[#8B92A0]">admin123</span>
-          <br />
-          Usuario demo: <span className="text-[#8B92A0]">maria@example.com</span> /{' '}
-          <span className="text-[#8B92A0]">demo1234</span>
-        </div>
+        {/* Credenciales de prueba: SOLO en desarrollo, nunca en producción. */}
+        {import.meta.env.DEV && (
+          <div className="mt-4 text-[11px] text-[#5B6472] text-center leading-relaxed">
+            Acceso admin (CRM): <span className="text-[#8B92A0]">admin@stratex.com</span> /{' '}
+            <span className="text-[#8B92A0]">admin123</span>
+            <br />
+            Usuario demo: <span className="text-[#8B92A0]">maria@example.com</span> /{' '}
+            <span className="text-[#8B92A0]">demo1234</span>
+          </div>
+        )}
       </div>
     </div>
   );

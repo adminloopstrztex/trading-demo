@@ -31,10 +31,14 @@ load();
 
 const app = express();
 app.disable('x-powered-by');
-app.use(helmet());
+// Detrás de Cloudflare/Railway: confiar en el primer proxy para leer la IP real
+// del cliente (necesario para que el rate limiting sea por-usuario, no global).
+app.set('trust proxy', 1);
+app.use(helmet()); // incluye HSTS, X-Content-Type-Options, etc.
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json({ limit: '64kb' }));
 
+// Límite estricto en autenticación (anti fuerza bruta).
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -42,6 +46,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiados intentos. Espera unos minutos.' },
 });
+
+// Límite global anti-abuso para toda la API (generoso para uso normal,
+// corta scraping/floods). ~1.1 req/s sostenidas por IP.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en unos minutos.' },
+});
+app.use('/api', apiLimiter);
 
 // ---- helpers ----
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
