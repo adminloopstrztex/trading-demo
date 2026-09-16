@@ -256,18 +256,33 @@ function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, 
   const changeStr = btc ? `${up ? '+' : ''}${btc.changePct.toFixed(2)}% hoy` : '+3.12% hoy';
   return (
     <section className="relative overflow-hidden">
-      {/* ambient glow + grid */}
+      {/* Crypto scene background (real image) + scrims that hide the logo baked
+          into the image's centre and keep the copy readable. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[-10%] h-[520px] w-[880px] -translate-x-1/2 rounded-full bg-[#16C784]/10 blur-[130px]" />
         <div
-          className="absolute inset-0 opacity-[0.4]"
+          className="absolute inset-0 bg-cover"
+          style={{ backgroundImage: 'url(/hero-bg.jpg)', backgroundPosition: '78% center' }}
+        />
+        {/* Left-weighted scrim: dark under the copy, lighter over the market visuals on the right. */}
+        <div
+          className="absolute inset-0"
           style={{
-            backgroundImage:
-              'linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px)',
-            backgroundSize: '56px 56px',
-            maskImage: 'radial-gradient(ellipse 70% 60% at 50% 30%, #000 40%, transparent 100%)',
+            background:
+              'linear-gradient(90deg, rgba(10,11,13,0.96) 0%, rgba(10,11,13,0.86) 42%, rgba(10,11,13,0.62) 66%, rgba(10,11,13,0.82) 100%)',
           }}
         />
+        {/* Vertical blend into the navbar (top) and the ticker tape (bottom). */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, rgba(10,11,13,0.80) 0%, rgba(10,11,13,0.20) 32%, rgba(10,11,13,0.30) 68%, #0A0B0D 100%)',
+          }}
+        />
+        {/* Soft dark blob to smother the logo baked into the centre of the image. */}
+        <div className="absolute left-[46%] top-1/2 h-[460px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0A0B0D]/90 blur-[70px]" />
+        {/* Subtle brand glow. */}
+        <div className="absolute left-1/2 top-[-12%] h-[520px] w-[880px] -translate-x-1/2 rounded-full bg-[#16C784]/10 blur-[130px]" />
       </div>
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-16 pt-16 sm:px-8 sm:pt-20 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pb-24">
