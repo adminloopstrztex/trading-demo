@@ -27,6 +27,32 @@ if (!SECRET) {
   );
 }
 
+// Cloudflare Turnstile (captcha anti-bot). El secreto se define por entorno;
+// si falta, la verificación se omite (útil en desarrollo local sin llaves).
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET;
+if (!TURNSTILE_SECRET && process.env.NODE_ENV === 'production') {
+  console.warn('[Stratex] TURNSTILE_SECRET no definido en producción: el captcha del registro NO se validará.');
+}
+
+async function verifyTurnstile(token, ip) {
+  if (!TURNSTILE_SECRET) return true; // no configurado: no bloquear
+  if (typeof token !== 'string' || !token) return false;
+  try {
+    const form = new URLSearchParams();
+    form.append('secret', TURNSTILE_SECRET);
+    form.append('response', token);
+    if (ip) form.append('remoteip', ip);
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: form,
+    });
+    const data = await r.json();
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
 load();
 
 const app = express();
@@ -197,8 +223,8 @@ function sanitizeSurvey(raw) {
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---- auth ----
-app.post('/api/auth/register', authLimiter, (req, res) => {
-  const { firstName, lastName, email, phone, password, survey } = req.body || {};
+app.post('/api/auth/register', authLimiter, async (req, res) => {
+  const { firstName, lastName, email, phone, password, survey, turnstileToken } = req.body || {};
   if (
     typeof firstName !== 'string' ||
     typeof lastName !== 'string' ||
@@ -213,6 +239,8 @@ app.post('/api/auth/register', authLimiter, (req, res) => {
   if (!PHONE_RE.test(phone.trim())) return res.status(400).json({ error: 'Teléfono inválido' });
   if (password.length < 6)
     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  if (!(await verifyTurnstile(turnstileToken, req.ip)))
+    return res.status(400).json({ error: 'Verificación anti-robot fallida. Recarga la página e inténtalo de nuevo.' });
   if (findUserByEmail(email)) return res.status(409).json({ error: 'Ese email ya está registrado' });
 
   const first = firstName.trim().slice(0, 40);

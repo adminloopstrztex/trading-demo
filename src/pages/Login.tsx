@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAccountStore } from '../store/accountStore';
 import Logo from '../components/Logo';
@@ -17,7 +17,8 @@ export default function Login() {
   const [tradingExperience, setTradingExperience] = useState(5);
   const [techComfort, setTechComfort] = useState(5);
   const [goal, setGoal] = useState('');
-  const [robot, setRobot] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const login = useAccountStore((s) => s.login);
@@ -41,8 +42,8 @@ export default function Login() {
         setError('Las contraseñas no coinciden.');
         return;
       }
-      if (!robot) {
-        setError('Confirma que no eres un robot.');
+      if (!turnstileToken) {
+        setError('Completa la verificación anti-robot.');
         return;
       }
     } else if (!email.trim() || !password) {
@@ -65,10 +66,16 @@ export default function Login() {
               techComfort,
               goal: goal || null,
             },
+            turnstileToken,
           });
     setLoading(false);
     if (!result.ok) {
       setError(result.error || 'No se pudo continuar.');
+      // El token de Turnstile es de un solo uso: reinícialo tras un fallo.
+      if (mode === 'register') {
+        setTurnstileToken('');
+        setCaptchaReset((n) => n + 1);
+      }
       return;
     }
     const user = useAccountStore.getState().user;
@@ -177,23 +184,8 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Simulated "no soy un robot" verification (a real reCAPTCHA needs Google keys + server check) */}
-              <div className="flex items-center gap-3 rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-3">
-                <input
-                  id="robot"
-                  type="checkbox"
-                  checked={robot}
-                  onChange={(e) => setRobot(e.target.checked)}
-                  className="w-6 h-6 accent-[#16C784]"
-                />
-                <label htmlFor="robot" className="text-sm text-[#B8BFCC] flex-1 cursor-pointer select-none">
-                  No soy un robot
-                </label>
-                <div className="text-right leading-none">
-                  <div className="text-[10px] text-[#5B6472]">Verificación</div>
-                  <div className="text-[9px] text-[#5B6472]">demo</div>
-                </div>
-              </div>
+              {/* Verificación anti-bot real con Cloudflare Turnstile */}
+              <TurnstileWidget onToken={setTurnstileToken} resetSignal={captchaReset} />
             </>
           )}
 
@@ -222,6 +214,81 @@ export default function Login() {
       </div>
     </div>
   );
+}
+
+// ---- Cloudflare Turnstile (captcha anti-bot) ----
+const TURNSTILE_SITE_KEY =
+  (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined) ?? '0x4AAAAAAE5akPqZEURdwDd0';
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+      reset: (id?: string) => void;
+      remove: (id?: string) => void;
+    };
+  }
+}
+
+function TurnstileWidget({
+  onToken,
+  resetSignal,
+}: {
+  onToken: (token: string) => void;
+  resetSignal: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
+
+    const render = () => {
+      if (cancelled || !containerRef.current || !window.turnstile || widgetId.current !== null) return;
+      widgetId.current = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: 'dark',
+        callback: (token: string) => onToken(token),
+        'expired-callback': () => onToken(''),
+        'error-callback': () => onToken(''),
+      });
+    };
+
+    if (window.turnstile) render();
+    else poll = setInterval(() => {
+      if (window.turnstile) {
+        if (poll) clearInterval(poll);
+        render();
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      if (poll) clearInterval(poll);
+      if (widgetId.current !== null && window.turnstile) {
+        try {
+          window.turnstile.remove(widgetId.current);
+        } catch {
+          /* noop */
+        }
+        widgetId.current = null;
+      }
+    };
+  }, [onToken]);
+
+  // Reinicia el widget cuando el padre lo pide (p. ej. tras un registro fallido).
+  useEffect(() => {
+    if (resetSignal > 0 && widgetId.current !== null && window.turnstile) {
+      try {
+        window.turnstile.reset(widgetId.current);
+      } catch {
+        /* noop */
+      }
+    }
+  }, [resetSignal]);
+
+  return <div ref={containerRef} className="min-h-[65px]" />;
 }
 
 // Lista completa de países (nombre en español, código ISO, código de marcación, bandera).

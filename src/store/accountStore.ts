@@ -39,6 +39,7 @@ export interface RegisterData {
   phone: string;
   password: string;
   survey?: OnboardingSurvey;
+  turnstileToken?: string;
 }
 
 interface AccountState {
