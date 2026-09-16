@@ -50,6 +50,37 @@ export default function AdminUserDetail() {
     setU((prev) => (prev ? { ...prev, notes: [note, ...prev.notes] } : prev));
   }
 
+  async function resetPassword() {
+    const pw = window.prompt('Nueva contraseña para este cliente (mínimo 6 caracteres):');
+    if (pw === null) return;
+    if (pw.length < 6) {
+      toast.error('Contraseña muy corta', 'Debe tener al menos 6 caracteres.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/admin/users/${id}/password`, { method: 'POST', body: { newPassword: pw } });
+      toast.success('Contraseña restablecida', `${u?.name} ya puede entrar con la nueva clave.`);
+    } catch (e) {
+      toast.error('No se pudo cambiar', (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteUserAccount() {
+    if (!confirm(`¿Eliminar definitivamente a ${u?.name}? Esta acción no se puede deshacer.`)) return;
+    setBusy(true);
+    try {
+      await api(`/admin/users/${id}`, { method: 'DELETE' });
+      toast.success('Usuario eliminado', `${u?.name} fue eliminado.`);
+      navigate('/admin/users');
+    } catch (e) {
+      toast.error('No se pudo eliminar', (e as Error).message);
+      setBusy(false);
+    }
+  }
+
   // Tag catalog for suggestions (any CRM member can read/write tags).
   useEffect(() => {
     api<{ tag: string; count: number }[]>('/admin/tags')
@@ -262,6 +293,22 @@ export default function AdminUserDetail() {
                     }}
                   >
                     Resetear a $10,000
+                  </ActionBtn>
+                </Control>
+              )}
+
+              {canReset && (
+                <Control label="Contraseña">
+                  <ActionBtn disabled={busy} onClick={resetPassword}>
+                    Restablecer contraseña
+                  </ActionBtn>
+                </Control>
+              )}
+
+              {canReset && (
+                <Control label="Zona de peligro">
+                  <ActionBtn danger active disabled={busy} onClick={deleteUserAccount}>
+                    Eliminar usuario
                   </ActionBtn>
                 </Control>
               )}

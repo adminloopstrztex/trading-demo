@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
+import { useAccountStore } from '../../store/accountStore';
 import type { CrmUser, PagedUsers } from './types';
 import { Avatar, KycBadge, StatusBadge, Skeleton, EmptyState } from './ui';
 import { fmtMoney, timeAgo } from './format';
@@ -129,7 +130,9 @@ export default function AdminUsers() {
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [showAdd, setShowAdd] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const canModerate = useAccountStore((s) => s.user?.permissions ?? []).includes('users.moderate');
 
   async function handleImportFile(file: File) {
     setImporting(true);
@@ -265,6 +268,14 @@ export default function AdminUsers() {
           <p className="text-sm text-[#8B92A0]">{loading ? 'Cargando…' : `${total} resultados`}</p>
         </div>
         <div className="flex items-center gap-2">
+          {canModerate && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="text-xs font-semibold rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white px-3 py-1.5"
+            >
+              + Añadir usuario
+            </button>
+          )}
           <button
             onClick={() => setDense((d) => !d)}
             aria-pressed={dense}
@@ -488,6 +499,102 @@ export default function AdminUsers() {
           </div>
         </div>
       )}
+
+      {showAdd && (
+        <AddUserModal
+          onClose={() => setShowAdd(false)}
+          onCreated={() => {
+            setShowAdd(false);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (name.trim().length < 2 || !email.trim()) {
+      toast.error('Faltan datos', 'Ingresa nombre y email válidos.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('/admin/users', {
+        method: 'POST',
+        body: { name: name.trim(), email: email.trim(), password: password || undefined },
+      });
+      toast.success('Usuario creado', `${name.trim()} fue añadido${password ? '' : ' (contraseña: demo1234)'}.`);
+      onCreated();
+    } catch (err) {
+      toast.error('No se pudo crear', (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl border border-[#262A33] bg-[#101216] p-5 space-y-3"
+      >
+        <h2 className="text-sm font-semibold text-[#F2F3F5]">Añadir usuario</h2>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Nombre completo</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Contraseña (opcional)</label>
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Por defecto: demo1234"
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] placeholder:text-[#5B6472] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="text-xs font-medium text-[#8B92A0] hover:text-[#F2F3F5] px-3 py-2">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="text-xs font-semibold rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white px-4 py-2 disabled:opacity-50"
+          >
+            {busy ? 'Creando…' : 'Crear usuario'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

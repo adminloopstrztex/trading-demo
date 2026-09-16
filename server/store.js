@@ -149,6 +149,10 @@ export function saveUser(user) {
   return user;
 }
 
+export function deleteUser(id) {
+  stmt('DELETE FROM users WHERE id = ?').run(id);
+}
+
 // Atomic read-modify-write for a single user. Runs find → mutate → save inside a
 // transaction; since node:sqlite is synchronous and the mutator must be sync too
 // (no awaits), concurrent writes to the same user are serialized with no lost

@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { load, addUser, saveUser, updateUser, importUsers, findUserByEmail, findUserById, getDb } from './store.js';
+import { load, addUser, saveUser, updateUser, deleteUser, importUsers, findUserByEmail, findUserById, getDb } from './store.js';
 import { isValidSymbol, fetchLivePrice, SYMBOLS } from './market.js';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -260,6 +260,22 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
 
 app.get('/api/auth/me', auth, (req, res) => {
   res.json({ user: publicUser(req.user), account: accountSnapshot(req.user) });
+});
+
+// Cambiar la propia contraseña (cualquier usuario autenticado).
+app.post('/api/auth/password', authLimiter, auth, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string')
+    return res.status(400).json({ error: 'Datos inválidos' });
+  if (newPassword.length < 6)
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+  if (!bcrypt.compareSync(currentPassword, req.user.passwordHash))
+    return res.status(400).json({ error: 'La contraseña actual es incorrecta' });
+  const r = updateUser(req.user.id, (user) => {
+    user.passwordHash = bcrypt.hashSync(newPassword, 10);
+  });
+  if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ ok: true });
 });
 
 // ---- trading: server is authoritative for balance & positions ----
@@ -682,6 +698,66 @@ app.post('/api/admin/users/:id/notes', auth, requirePerm('users.moderate'), (req
   user.notes = [note, ...(user.notes || [])];
   saveUser(user);
   res.json(note);
+});
+
+// Crear un cliente manualmente desde el CRM (rol 'user').
+app.post('/api/admin/users', auth, requirePerm('users.moderate'), (req, res) => {
+  const { name, email, phone, password } = req.body || {};
+  if (typeof name !== 'string' || typeof email !== 'string')
+    return res.status(400).json({ error: 'Datos inválidos' });
+  if (name.trim().length < 2) return res.status(400).json({ error: 'El nombre es demasiado corto' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Email inválido' });
+  if (findUserByEmail(email)) return res.status(409).json({ error: 'Ese email ya está registrado' });
+  const pass = typeof password === 'string' && password.length >= 6 ? password : 'demo1234';
+  const first = name.trim().split(' ')[0].slice(0, 40);
+  const last = name.trim().split(' ').slice(1).join(' ').slice(0, 40);
+  const now = Date.now();
+  const user = {
+    id: randomUUID(),
+    firstName: first,
+    lastName: last,
+    name: name.trim().slice(0, 80),
+    email: email.toLowerCase(),
+    phone: typeof phone === 'string' ? phone.trim().slice(0, 20) : '',
+    passwordHash: bcrypt.hashSync(pass, 10),
+    role: 'user',
+    status: 'active',
+    kycStatus: 'none',
+    createdAt: now,
+    lastActiveAt: now,
+    virtualBalance: STARTING_BALANCE,
+    holdings: [],
+    transactions: [],
+    tags: [],
+    notes: [],
+    pendingOrders: [],
+    survey: null,
+  };
+  addUser(user);
+  res.status(201).json(crmUser(user));
+});
+
+// Eliminar un cliente (acción destructiva → permiso users.reset, solo admin).
+app.delete('/api/admin/users/:id', auth, requirePerm('users.reset'), (req, res) => {
+  const user = findUserById(req.params.id);
+  if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+  deleteUser(user.id);
+  res.json({ ok: true });
+});
+
+// Restablecer la contraseña de un cliente (admin → permiso users.reset).
+app.post('/api/admin/users/:id/password', auth, requirePerm('users.reset'), (req, res) => {
+  const { newPassword } = req.body || {};
+  if (typeof newPassword !== 'string' || newPassword.length < 6)
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  const target = findUserById(req.params.id);
+  if (!target || target.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
+  const r = updateUser(target.id, (u) => {
+    u.passwordHash = bcrypt.hashSync(newPassword, 10);
+  });
+  if (r.notFound) return res.status(404).json({ error: 'No encontrado' });
+  res.json({ ok: true });
 });
 
 // ---- team & roles ----

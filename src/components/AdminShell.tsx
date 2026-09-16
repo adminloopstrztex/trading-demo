@@ -1,9 +1,13 @@
+import { useState, type FormEvent } from 'react';
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
 import { useAccountStore } from '../store/accountStore';
+import { api } from '../api';
+import { toast } from '../store/toastStore';
 
 export default function AdminShell() {
   const user = useAccountStore((s) => s.user);
   const logout = useAccountStore((s) => s.logout);
+  const [pwOpen, setPwOpen] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!user.permissions.includes('crm.view')) return <Navigate to="/app" replace />;
@@ -53,10 +57,13 @@ export default function AdminShell() {
         <div className="mt-auto px-2 pt-4 border-t border-[#1E2128]">
           <div className="text-sm font-medium text-[#F2F3F5]">{user.name}</div>
           <div className="text-[11px] text-[#5B6472] mb-1">{ROLE_LABEL[user.role] ?? user.role}</div>
-          <div className="flex gap-3 text-xs">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
             <a href="/app" className="text-[#8B92A0] hover:text-[#F2F3F5]">
               Ver app
             </a>
+            <button onClick={() => setPwOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
+              Contraseña
+            </button>
             <button onClick={logout} className="text-[#8B92A0] hover:text-[#FF5C5C]">
               Salir
             </button>
@@ -66,6 +73,82 @@ export default function AdminShell() {
       <main className="flex-1 min-w-0 px-8 py-7 max-w-[1200px]">
         <Outlet />
       </main>
+      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
+    </div>
+  );
+}
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (next.length < 6) {
+      toast.error('Contraseña muy corta', 'La nueva debe tener al menos 6 caracteres.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('/auth/password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
+      toast.success('Contraseña actualizada', 'Usa la nueva la próxima vez que entres.');
+      onClose();
+    } catch (err) {
+      toast.error('No se pudo cambiar', (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl border border-[#262A33] bg-[#101216] p-5 space-y-3"
+      >
+        <h2 className="text-sm font-semibold text-[#F2F3F5]">Cambiar mi contraseña</h2>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Contraseña actual</label>
+          <input
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoFocus
+            autoComplete="current-password"
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Nueva contraseña</label>
+          <input
+            type="password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            autoComplete="new-password"
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="text-xs font-medium text-[#8B92A0] hover:text-[#F2F3F5] px-3 py-2">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="text-xs font-semibold rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white px-4 py-2 disabled:opacity-50"
+          >
+            {busy ? 'Guardando…' : 'Cambiar'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
