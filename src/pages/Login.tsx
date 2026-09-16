@@ -201,9 +201,6 @@ export default function Login() {
             {loading ? 'Cargando…' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
           </button>
 
-          <p className="text-[11px] text-[#8B92A0] text-center">
-            Empieza con $10,000 en fondos de práctica. Sin comisiones.
-          </p>
         </form>
 
         {/* Credenciales de prueba: SOLO en desarrollo, nunca en producción. */}
