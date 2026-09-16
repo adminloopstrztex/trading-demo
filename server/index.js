@@ -306,6 +306,32 @@ app.post('/api/auth/password', authLimiter, auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Cambio de correo propio (verifica la contraseña actual).
+app.post('/api/auth/email', authLimiter, auth, (req, res) => {
+  const { newEmail, currentPassword } = req.body || {};
+  if (typeof newEmail !== 'string' || typeof currentPassword !== 'string')
+    return res.status(400).json({ error: 'Datos inválidos' });
+  const email = newEmail.trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Email inválido' });
+  if (!bcrypt.compareSync(currentPassword, req.user.passwordHash))
+    return res.status(400).json({ error: 'La contraseña actual es incorrecta' });
+  const existing = findUserByEmail(email);
+  if (existing && existing.id !== req.user.id)
+    return res.status(409).json({ error: 'Ese email ya está en uso' });
+  if (email === (req.user.email || '').toLowerCase())
+    return res.status(400).json({ error: 'Ese ya es tu correo actual' });
+  try {
+    const r = updateUser(req.user.id, (user) => {
+      user.email = email;
+    });
+    if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({ ok: true, email });
+  } catch {
+    // Violación de UNIQUE u otro error de escritura
+    res.status(409).json({ error: 'No se pudo actualizar el correo (¿ya está en uso?)' });
+  }
+});
+
 // ---- trading: server is authoritative for balance & positions ----
 app.post(
   '/api/account/trade',

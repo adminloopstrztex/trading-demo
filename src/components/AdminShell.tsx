@@ -7,7 +7,9 @@ import { toast } from '../store/toastStore';
 export default function AdminShell() {
   const user = useAccountStore((s) => s.user);
   const logout = useAccountStore((s) => s.logout);
+  const restore = useAccountStore((s) => s.restore);
   const [pwOpen, setPwOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!user.permissions.includes('crm.view')) return <Navigate to="/app" replace />;
@@ -56,11 +58,15 @@ export default function AdminShell() {
         </nav>
         <div className="mt-auto px-2 pt-4 border-t border-[#1E2128]">
           <div className="text-sm font-medium text-[#F2F3F5]">{user.name}</div>
+          <div className="text-[11px] text-[#8B92A0] truncate" title={user.email}>{user.email}</div>
           <div className="text-[11px] text-[#5B6472] mb-1">{ROLE_LABEL[user.role] ?? user.role}</div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
             <a href="/app" className="text-[#8B92A0] hover:text-[#F2F3F5]">
               Ver app
             </a>
+            <button onClick={() => setEmailOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
+              Correo
+            </button>
             <button onClick={() => setPwOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
               Contraseña
             </button>
@@ -74,6 +80,102 @@ export default function AdminShell() {
         <Outlet />
       </main>
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
+      {emailOpen && (
+        <ChangeEmailModal
+          currentEmail={user.email}
+          onClose={() => setEmailOpen(false)}
+          onChanged={() => restore()}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChangeEmailModal({
+  currentEmail,
+  onClose,
+  onChanged,
+}: {
+  currentEmail: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [newEmail, setNewEmail] = useState('');
+  const [current, setCurrent] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const email = newEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Correo inválido', 'Escribe un correo con formato válido.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('/auth/email', { method: 'POST', body: { newEmail: email, currentPassword: current } });
+      toast.success('Correo actualizado', `Ahora entras con ${email}.`);
+      onChanged();
+      onClose();
+    } catch (err) {
+      toast.error('No se pudo cambiar', (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl border border-[#262A33] bg-[#101216] p-5 space-y-3"
+      >
+        <h2 className="text-sm font-semibold text-[#F2F3F5]">Cambiar mi correo</h2>
+        <p className="text-[11px] text-[#5B6472]">
+          Correo actual: <span className="text-[#8B92A0]">{currentEmail}</span>
+        </p>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Nuevo correo</label>
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            autoFocus
+            autoComplete="email"
+            placeholder="adminloop@stratex.capital"
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-[#8B92A0] mb-1">Confirma tu contraseña</label>
+          <input
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoComplete="current-password"
+            className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="text-xs font-medium text-[#8B92A0] hover:text-[#F2F3F5] px-3 py-2">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="text-xs font-semibold rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white px-4 py-2 disabled:opacity-50"
+          >
+            {busy ? 'Guardando…' : 'Cambiar correo'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
