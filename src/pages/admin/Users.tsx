@@ -85,19 +85,29 @@ function csvCell(v: unknown) {
   return `"${String(v).replace(/"/g, '""')}"`;
 }
 function downloadCsv(rows: CrmUser[]) {
-  const head = ['ID', 'Nombre', 'Email', 'Estado', 'KYC', 'Equity', 'Invertido', 'Operaciones', 'Registrado', 'Última actividad'];
+  const head = [
+    'ID', 'Nombre', 'Email', 'Teléfono', 'Estado', 'KYC',
+    'Equity', 'Invertido', 'Operaciones',
+    'Experiencia (1-10)', 'Tecnología (1-10)', 'Objetivo',
+    'Registrado', 'Última actividad',
+  ];
   const lines = [head.map(csvCell).join(',')];
   for (const u of rows) {
+    const goal = u.survey?.goal ? (GOAL_LABELS[u.survey.goal] ?? u.survey.goal) : '';
     lines.push(
       [
         u.id,
         u.name,
         u.email,
+        u.phone ?? '',
         u.status,
         u.kycStatus,
         (u.virtualBalance + u.invested).toFixed(2),
         u.invested.toFixed(2),
         u.tradesCount,
+        u.survey?.tradingExperience ?? '',
+        u.survey?.techComfort ?? '',
+        goal,
         new Date(u.createdAt).toISOString(),
         new Date(u.lastActiveAt).toISOString(),
       ]
