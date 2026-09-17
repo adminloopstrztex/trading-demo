@@ -1156,6 +1156,130 @@ function Footer() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Virtual funds — animated odometer band                             */
+/* ------------------------------------------------------------------ */
+
+// One rolling digit reel: a 0-9 strip repeated (spins+1) times that translates
+// up to land on `target` after `spins` full loops — the slot-machine settle.
+function Reel({ target, spins, go, reduce }: { target: number; spins: number; go: boolean; reduce: boolean }) {
+  const strip = Array.from({ length: (spins + 1) * 10 }, (_, i) => i % 10);
+  const finalIndex = spins * 10 + target;
+  const y = go ? finalIndex : 0;
+  return (
+    <span className="relative inline-block overflow-hidden align-top" style={{ height: '1em', width: '0.62em' }}>
+      <span
+        className="absolute left-0 top-0 flex flex-col items-center"
+        style={{
+          transform: `translateY(-${y}em)`,
+          transition: go && !reduce ? `transform ${1.15 + spins * 0.13}s cubic-bezier(0.16, 1, 0.3, 1)` : 'none',
+        }}
+      >
+        {strip.map((d, i) => (
+          <span key={i} style={{ height: '1em', lineHeight: '1em' }}>
+            {d}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+// $10,000 with each digit on its own reel; the rightmost reels spin longer so
+// the number "settles" left-to-right like a real odometer.
+function Odometer() {
+  const [go, setGo] = useState(false);
+  const [reduce, setReduce] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const r = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    setReduce(r);
+    const el = ref.current;
+    if (!el) return;
+    if (r) {
+      setGo(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && (setGo(true), io.disconnect())),
+      { threshold: 0.4 }
+    );
+    io.observe(el);
+    const fallback = window.setTimeout(() => setGo(true), 1400);
+    return () => {
+      io.disconnect();
+      window.clearTimeout(fallback);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      aria-label="$10,000"
+      className="mt-8 flex items-center justify-center font-mono font-semibold leading-none tracking-tight text-[#16C784] tabular-nums"
+      style={{ fontSize: 'clamp(3.25rem, 12vw, 7.5rem)', textShadow: '0 0 60px rgba(22,199,132,0.35)' }}
+    >
+      <span aria-hidden className="mr-[0.06em] text-[#8FE9C4]">$</span>
+      <Reel target={1} spins={2} go={go} reduce={reduce} />
+      <Reel target={0} spins={3} go={go} reduce={reduce} />
+      <span aria-hidden className="mx-[0.02em] text-[#8FE9C4]">,</span>
+      <Reel target={0} spins={4} go={go} reduce={reduce} />
+      <Reel target={0} spins={5} go={go} reduce={reduce} />
+      <Reel target={0} spins={6} go={go} reduce={reduce} />
+    </div>
+  );
+}
+
+function VirtualFunds() {
+  return (
+    <section className="relative overflow-hidden border-y border-[#1E2128] bg-[#0F1115]">
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#16C784]/10 blur-[120px]" />
+      <div className="relative mx-auto max-w-3xl px-5 py-24 text-center sm:px-8 sm:py-28">
+        <Reveal>
+          <h2
+            className="text-[clamp(1.75rem,4vw,2.75rem)] font-semibold tracking-[-0.02em] text-[#F2F3F5]"
+            style={{ textWrap: 'balance' }}
+          >
+            Opera con fondos de práctica, no con tu dinero.
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-[16px] leading-relaxed text-[#B8BFCC]">
+            Tu cuenta arranca con saldo virtual precargado. Practica en mercados reales sin arriesgar
+            nada y reinícialo cuando quieras.
+          </p>
+        </Reveal>
+
+        <Reveal delay={120}>
+          <Odometer />
+          <div className="mt-3 font-mono text-xs uppercase tracking-[0.2em] text-[#5B6472]">
+            en saldo de práctica
+          </div>
+        </Reveal>
+
+        <Reveal delay={220}>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-[#8B92A0]">
+            {['100% virtual', 'Sin depósitos', 'Reinícialo cuando quieras'].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="text-[#16C784]">
+                  <path d="M5 12l4 4L19 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t}
+              </span>
+            ))}
+          </div>
+          <Link
+            to="/login"
+            state={{ mode: 'register' }}
+            className="mt-8 inline-flex rounded-xl bg-[#16C784] px-6 py-3 text-sm font-semibold text-[#0A0B0D] transition hover:bg-[#13B374]"
+          >
+            Reclamar mis $10,000
+          </Link>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 
 export default function Landing() {
   useJsMotion();
@@ -1167,6 +1291,7 @@ export default function Landing() {
         <Hero live={live} />
         <Tape live={live.stats} />
         <Features />
+        <VirtualFunds />
         <Showcase />
         <Markets live={live.stats} />
         <Steps />
