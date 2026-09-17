@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 
 import { Link } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { fetchCryptoCandles, fetchCrypto24h } from '../data/cryptoFeed';
+import { useCountUp } from '../hooks/useCountUp';
 
 interface OHLC {
   open: number;
@@ -1159,35 +1160,9 @@ function Footer() {
 /*  Virtual funds — animated odometer band                             */
 /* ------------------------------------------------------------------ */
 
-// One rolling digit reel: a 0-9 strip repeated (spins+1) times that translates
-// up to land on `target` after `spins` full loops — the slot-machine settle.
-function Reel({ target, spins, go, reduce }: { target: number; spins: number; go: boolean; reduce: boolean }) {
-  const strip = Array.from({ length: (spins + 1) * 10 }, (_, i) => i % 10);
-  const finalIndex = spins * 10 + target;
-  const y = go ? finalIndex : 0;
-  return (
-    <span className="relative inline-block overflow-hidden align-top" style={{ height: '1em', width: '0.62em' }}>
-      <span
-        className="absolute left-0 top-0 flex flex-col items-center"
-        style={{
-          transform: `translateY(-${y}em)`,
-          transition: go && !reduce ? `transform ${1.15 + spins * 0.13}s cubic-bezier(0.16, 1, 0.3, 1)` : 'none',
-        }}
-      >
-        {strip.map((d, i) => (
-          <span key={i} style={{ height: '1em', lineHeight: '1em' }}>
-            {d}
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
-// $10,000 with each digit on its own reel; the rightmost reels spin longer so
-// the number "settles" left-to-right like a real odometer.
+// Count-up counter: ticks from $0 up to $10,000 when scrolled into view.
 function Odometer() {
-  const [go, setGo] = useState(false);
+  const [target, setTarget] = useState(0);
   const [reduce, setReduce] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -1197,20 +1172,22 @@ function Odometer() {
     const el = ref.current;
     if (!el) return;
     if (r) {
-      setGo(true);
+      setTarget(10000);
       return;
     }
     const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => e.isIntersecting && (setGo(true), io.disconnect())),
+      (entries) => entries.forEach((e) => e.isIntersecting && (setTarget(10000), io.disconnect())),
       { threshold: 0.4 }
     );
     io.observe(el);
-    const fallback = window.setTimeout(() => setGo(true), 1400);
+    const fallback = window.setTimeout(() => setTarget(10000), 1400);
     return () => {
       io.disconnect();
       window.clearTimeout(fallback);
     };
   }, []);
+
+  const display = useCountUp(target, reduce ? 0 : 1800);
 
   return (
     <div
@@ -1219,13 +1196,8 @@ function Odometer() {
       className="mt-8 flex items-center justify-center font-mono font-semibold leading-none tracking-tight text-[#16C784] tabular-nums"
       style={{ fontSize: 'clamp(3.25rem, 12vw, 7.5rem)', textShadow: '0 0 60px rgba(22,199,132,0.35)' }}
     >
-      <span aria-hidden className="mr-[0.06em] text-[#8FE9C4]">$</span>
-      <Reel target={1} spins={2} go={go} reduce={reduce} />
-      <Reel target={0} spins={3} go={go} reduce={reduce} />
-      <span aria-hidden className="mx-[0.02em] text-[#8FE9C4]">,</span>
-      <Reel target={0} spins={4} go={go} reduce={reduce} />
-      <Reel target={0} spins={5} go={go} reduce={reduce} />
-      <Reel target={0} spins={6} go={go} reduce={reduce} />
+      <span aria-hidden className="mr-[0.04em] text-[#8FE9C4]">$</span>
+      {Math.round(display).toLocaleString('en-US')}
     </div>
   );
 }
