@@ -167,23 +167,6 @@ function CandleChart({ candles = FAUX_CANDLES }: { candles?: OHLC[] }) {
   );
 }
 
-// Small closing-price area line, used inside the floating portfolio chip.
-function Sparkline() {
-  const pts = CANDLES.map((c) => c[3]);
-  const W = 120;
-  const H = 40;
-  const max = Math.max(...pts);
-  const min = Math.min(...pts);
-  const d = pts
-    .map((v, i) => `${(i / (pts.length - 1)) * W},${H - ((v - min) / (max - min)) * H}`)
-    .join(' ');
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" aria-hidden="true">
-      <polyline points={d} fill="none" stroke="#16C784" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 const TAPE = [
   { s: 'BTC', n: 'Bitcoin', p: '67,240.10', c: '+3.12%', up: true, live: true },
   { s: 'ETH', n: 'Ethereum', p: '3,512.44', c: '+1.87%', up: true, live: true },
@@ -252,8 +235,8 @@ function NavBar() {
 function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, Stat>; btc: Stat | null } }) {
   const btc = live.btc;
   const up = btc ? btc.changePct >= 0 : true;
-  const priceStr = btc ? `$${fmtUsd(btc.price)}` : '$67,240.10';
-  const changeStr = btc ? `${up ? '+' : ''}${btc.changePct.toFixed(2)}% hoy` : '+3.12% hoy';
+  const priceNum = btc ? btc.price : 67240.1;
+  const changePct = btc ? btc.changePct : 3.12;
   return (
     <section className="relative overflow-hidden">
       {/* Crypto scene background (real image) + scrims that hide the logo baked
@@ -359,69 +342,216 @@ function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, 
           </dl>
         </div>
 
-        {/* Product mock */}
+        {/* Product mock — live trading terminal */}
         <div className="strx-rise relative" style={{ '--rise-delay': '200ms' } as CSSProperties}>
-          <BrowserFrame url="stratex.app/invertir/BTC">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Coin symbol="BTC" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-[#F2F3F5]">BTC</span>
-                    <span className="inline-flex items-center gap-1 rounded bg-[#16C784]/12 px-1.5 py-0.5 text-[9px] font-semibold text-[#16C784]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#16C784] strx-pulse" />
-                      EN VIVO
-                    </span>
-                  </div>
-                  <div className="text-xs text-[#8B92A0]">Bitcoin</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-lg font-semibold text-[#F2F3F5]">{priceStr}</div>
-                <div className={`font-mono text-xs font-medium ${up ? 'text-[#16C784]' : 'text-[#FF5C5C]'}`}>{changeStr}</div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <CandleChart candles={live.candles ?? undefined} />
-            </div>
-
-            <div className="mt-3 flex gap-1">
-              {['1D', '1S', '1M', '1A', 'Máx'].map((r, i) => (
-                <span
-                  key={r}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium ${
-                    i === 2 ? 'bg-[#16C784]/15 text-[#16C784]' : 'text-[#8B92A0]'
-                  }`}
-                >
-                  {r}
-                </span>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center gap-2 border-t border-[#1E2128] pt-4">
-              <div className="flex flex-1 rounded-lg bg-[#0A0B0D] p-1 text-center text-xs font-medium">
-                <span className="flex-1 rounded-md bg-[#16C784] py-1.5 text-[#0A0B0D]">Comprar</span>
-                <span className="flex-1 py-1.5 text-[#8B92A0]">Vender</span>
-              </div>
-              <div className="rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 font-mono text-sm text-[#F2F3F5]">
-                $500.00
-              </div>
-            </div>
-          </BrowserFrame>
-
-          {/* Floating portfolio chip */}
-          <div className="strx-float absolute -bottom-6 -left-4 w-52 rounded-2xl border border-[#1E2128] bg-[#101216] p-4 shadow-[0_16px_40px_-12px_#000] sm:-left-8">
-            <div className="text-xs text-[#8B92A0]">Tu patrimonio</div>
-            <div className="mt-0.5 font-mono text-xl font-semibold text-[#F2F3F5]">$12,480.34</div>
-            <div className="font-mono text-xs font-medium text-[#16C784]">+$2,480.34 (24.8%)</div>
-            <div className="mt-2">
-              <Sparkline />
-            </div>
-          </div>
+          <TradingTerminal candles={live.candles} price={priceNum} changePct={changePct} up={up} />
         </div>
       </div>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Live trading terminal (hero mock)                                  */
+/* ------------------------------------------------------------------ */
+
+function fmt(n: number, dec = 2) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+// Tiny deterministic PRNG so the order book is stable across renders (seeded by
+// the integer price) but shifts as the live price moves — reads as real depth.
+function seeded(seed: number, i: number) {
+  const x = Math.sin(seed * 0.017 + i * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// Background flash when the tracked value ticks up or down.
+function useTickFlash(value: number) {
+  const prev = useRef(value);
+  const [dir, setDir] = useState<'up' | 'down' | null>(null);
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = value;
+    if (value === p) return;
+    setDir(value > p ? 'up' : 'down');
+    const t = window.setTimeout(() => setDir(null), 600);
+    return () => window.clearTimeout(t);
+  }, [value]);
+  return dir;
+}
+
+const TF = ['15m', '1H', '4H', '1D', '1S'];
+const TERMINAL_TABS = [
+  { s: 'BTC', pair: 'BTC/USDT' },
+  { s: 'ETH', pair: 'ETH/USDT' },
+  { s: 'SOL', pair: 'SOL/USDT' },
+];
+
+function TradingTerminal({
+  candles,
+  price,
+  changePct,
+  up,
+}: {
+  candles: OHLC[] | null;
+  price: number;
+  changePct: number;
+  up: boolean;
+}) {
+  const flash = useTickFlash(price);
+  const dir = up ? '#16C784' : '#FF5C5C';
+  const high = price * 1.028;
+  const low = price * 0.981;
+  const vol = price * 18.4; // BTC-notional 24h volume, plausible mock
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#1E2128] bg-[#0D0F13] shadow-[0_30px_80px_-30px_#000]">
+      {/* window bar with symbol tabs */}
+      <div className="flex items-center gap-3 border-b border-[#1E2128] bg-[#0F1115] px-3 py-2">
+        <div className="flex items-center gap-1.5 pr-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#FF5C5C]/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#E8B339]/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#16C784]/70" />
+        </div>
+        <div className="flex items-center gap-1">
+          {TERMINAL_TABS.map((t, i) => (
+            <span
+              key={t.s}
+              className={`rounded-md px-2 py-1 font-mono text-[11px] ${
+                i === 0 ? 'bg-[#16181C] text-[#F2F3F5]' : 'text-[#5B6472]'
+              }`}
+            >
+              {t.pair}
+            </span>
+          ))}
+        </div>
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded bg-[#16C784]/12 px-1.5 py-0.5 text-[9px] font-semibold text-[#16C784]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#16C784] strx-pulse" />
+          EN VIVO
+        </span>
+      </div>
+
+      {/* instrument header: price + 24h stats */}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-2 border-b border-[#1E2128] px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Coin symbol="BTC" size={34} />
+          <div>
+            <div className="text-sm font-medium text-[#F2F3F5]">BTC/USDT</div>
+            <div className="text-[11px] text-[#8B92A0]">Bitcoin · Spot</div>
+          </div>
+        </div>
+        <div>
+          <div
+            className={`rounded px-1 font-mono text-2xl font-semibold tabular-nums ${flash === 'up' ? 'strx-flash-up' : flash === 'down' ? 'strx-flash-down' : ''}`}
+            style={{ color: dir }}
+          >
+            {fmt(price)}
+          </div>
+          <div className="font-mono text-xs font-medium" style={{ color: dir }}>
+            {changePct >= 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(2)}% · 24h
+          </div>
+        </div>
+        <div className="ml-auto hidden grid-cols-3 gap-x-5 sm:grid">
+          <Stat label="Máx 24h" value={fmt(high)} />
+          <Stat label="Mín 24h" value={fmt(low)} />
+          <Stat label="Vol 24h" value={`${fmt(vol / 1000, 1)}K`} />
+        </div>
+      </div>
+
+      {/* body: chart + order book */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_150px]">
+        <div className="border-b border-[#1E2128] p-3 md:border-b-0 md:border-r">
+          <div className="mb-2 flex items-center gap-1">
+            {TF.map((t, i) => (
+              <span
+                key={t}
+                className={`rounded-md px-2 py-0.5 font-mono text-[11px] ${
+                  i === 3 ? 'bg-[#16C784]/15 text-[#16C784]' : 'text-[#5B6472]'
+                }`}
+              >
+                {t}
+              </span>
+            ))}
+            <span className="ml-auto font-mono text-[10px] text-[#5B6472]">O 67.1K · H 68.2K · L 66.9K</span>
+          </div>
+          <CandleChart candles={candles ?? undefined} />
+        </div>
+        <OrderBook mid={price} />
+      </div>
+
+      {/* trade panel */}
+      <div className="flex items-center gap-2 border-t border-[#1E2128] px-3 py-3">
+        <div className="flex flex-1 rounded-lg bg-[#0A0B0D] p-1 text-center text-xs font-semibold">
+          <span className="flex-1 rounded-md bg-[#16C784] py-1.5 text-[#0A0B0D]">Comprar</span>
+          <span className="flex-1 py-1.5 text-[#8B92A0]">Vender</span>
+        </div>
+        <div className="flex items-center rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-3 py-2 font-mono text-sm">
+          <span className="mr-1 text-[#5B6472]">$</span>
+          <span className="text-[#F2F3F5]">500.00</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-wide text-[#5B6472]">{label}</div>
+      <div className="font-mono text-xs font-medium text-[#B8BFCC] tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function OrderBook({ mid }: { mid: number }) {
+  const rows = 6;
+  const step = mid * 0.00045;
+  const seed = Math.floor(mid);
+  // nearest → farthest
+  const asks = Array.from({ length: rows }, (_, i) => ({
+    price: mid + step * (i + 1),
+    size: 0.04 + seeded(seed, i + 1) * 1.15,
+  }));
+  const bids = Array.from({ length: rows }, (_, i) => ({
+    price: mid - step * (i + 1),
+    size: 0.04 + seeded(seed, i + 40) * 1.15,
+  }));
+  const maxSize = Math.max(...asks.map((r) => r.size), ...bids.map((r) => r.size));
+
+  const Row = ({ price, size, side }: { price: number; size: number; side: 'ask' | 'bid' }) => {
+    const color = side === 'ask' ? '#FF5C5C' : '#16C784';
+    return (
+      <div className="relative grid grid-cols-2 px-2.5 py-[3px] font-mono text-[10px] tabular-nums">
+        <div
+          className="absolute inset-y-0 right-0"
+          style={{ width: `${(size / maxSize) * 100}%`, background: `${color}14` }}
+        />
+        <span className="relative" style={{ color }}>
+          {fmt(price, 1)}
+        </span>
+        <span className="relative text-right text-[#8B92A0]">{size.toFixed(3)}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="hidden flex-col py-2 md:flex">
+      <div className="flex justify-between px-2.5 pb-1 font-mono text-[9px] uppercase tracking-wide text-[#5B6472]">
+        <span>Precio</span>
+        <span>Tamaño</span>
+      </div>
+      {[...asks].reverse().map((r, i) => (
+        <Row key={`a${i}`} {...r} side="ask" />
+      ))}
+      <div className="my-1 px-2.5 font-mono text-xs font-semibold tabular-nums" style={{ color: '#16C784' }}>
+        {fmt(mid, 1)}
+        <span className="ml-1 text-[9px] font-normal text-[#5B6472]">≈ spread 0.02%</span>
+      </div>
+      {bids.map((r, i) => (
+        <Row key={`b${i}`} {...r} side="bid" />
+      ))}
+    </div>
   );
 }
 
