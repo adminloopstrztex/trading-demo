@@ -91,7 +91,8 @@ export default function CommandPalette() {
       nav.push(
         { id: 'nav-crm', group: 'CRM', label: 'Dashboard CRM', keywords: 'admin metricas panel', icon: <Glyph>{ICON.crm}</Glyph>, run: go('/admin') },
         { id: 'nav-users', group: 'CRM', label: 'Usuarios', keywords: 'clientes crm', icon: <Glyph>{ICON.crm}</Glyph>, run: go('/admin/users') },
-        { id: 'nav-team', group: 'CRM', label: 'Equipo', keywords: 'roles permisos staff', icon: <Glyph>{ICON.crm}</Glyph>, run: go('/admin/team') }
+        { id: 'nav-team', group: 'CRM', label: 'Equipo', keywords: 'roles permisos staff', icon: <Glyph>{ICON.crm}</Glyph>, run: go('/admin/team') },
+        { id: 'nav-audit', group: 'CRM', label: 'Actividad', keywords: 'auditoria bitacora log registro', icon: <Glyph>{ICON.crm}</Glyph>, run: go('/admin/audit') }
       );
     }
     const assetItems: Item[] = Object.values(assets).map((a) => ({

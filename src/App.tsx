@@ -23,6 +23,7 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminUserDetail = lazy(() => import('./pages/admin/UserDetail'));
 const AdminLeads = lazy(() => import('./pages/admin/Leads'));
 const AdminTeam = lazy(() => import('./pages/admin/Team'));
+const AdminAudit = lazy(() => import('./pages/admin/Audit'));
 
 function FullScreenLoader() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/admin/users/:id" element={<AdminUserDetail />} />
             <Route path="/admin/leads" element={<AdminLeads />} />
             <Route path="/admin/team" element={<AdminTeam />} />
+            <Route path="/admin/audit" element={<AdminAudit />} />
           </Route>
         </Routes>
         </Suspense>

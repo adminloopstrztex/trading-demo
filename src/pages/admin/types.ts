@@ -73,3 +73,21 @@ export interface CrmUserDetail extends CrmUser {
   transactions: Transaction[];
   notes: Note[];
 }
+
+export interface AuditEntry {
+  id: string;
+  at: number;
+  actorId: string | null;
+  actorName: string | null;
+  action: string;
+  targetId: string | null;
+  targetName: string | null;
+  detail: string | null;
+}
+
+export interface PagedAudit {
+  items: AuditEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

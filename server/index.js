@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { load, addUser, saveUser, updateUser, deleteUser, importUsers, findUserByEmail, findUserById, getDb } from './store.js';
+import { load, addUser, saveUser, updateUser, deleteUser, importUsers, findUserByEmail, findUserById, getDb, recordAudit, listAudit } from './store.js';
 import { isValidSymbol, fetchLivePrice, SYMBOLS } from './market.js';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -111,6 +111,24 @@ function hasPerm(user, perm) {
 function requirePerm(perm) {
   return (req, res, next) =>
     hasPerm(req.user, perm) ? next() : res.status(403).json({ error: 'No tienes permiso para esta acción' });
+}
+
+// Bitácora: registra una acción del CRM. Nunca debe romper la acción principal.
+function logAction(req, action, target, detail) {
+  try {
+    recordAudit({
+      id: randomUUID(),
+      at: Date.now(),
+      actorId: req.user?.id ?? null,
+      actorName: req.user?.name ?? null,
+      action,
+      targetId: target?.id ?? null,
+      targetName: target?.name ?? target?.email ?? null,
+      detail: detail ?? null,
+    });
+  } catch {
+    /* auditar es best-effort */
+  }
 }
 
 function publicUser(u) {
@@ -303,6 +321,7 @@ app.post('/api/auth/password', authLimiter, auth, (req, res) => {
     user.passwordHash = bcrypt.hashSync(newPassword, 10);
   });
   if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (hasPerm(req.user, 'crm.view')) logAction(req, 'self.password_change', req.user, 'cambió su propia contraseña');
   res.json({ ok: true });
 });
 
@@ -325,6 +344,7 @@ app.post('/api/auth/email', authLimiter, auth, (req, res) => {
       user.email = email;
     });
     if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (hasPerm(req.user, 'crm.view')) logAction(req, 'self.email_change', req.user, `nuevo correo: ${email}`);
     res.json({ ok: true, email });
   } catch {
     // Violación de UNIQUE u otro error de escritura
@@ -633,15 +653,27 @@ app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res
   const { status, kycStatus, tags, resetBalance } = req.body || {};
   if (resetBalance && !hasPerm(req.user, 'users.reset'))
     return res.status(403).json({ error: 'No tienes permiso para resetear saldos' });
-  if (status && ['active', 'suspended'].includes(status)) user.status = status;
-  if (kycStatus && ['none', 'pending', 'verified'].includes(kycStatus)) user.kycStatus = kycStatus;
-  if (Array.isArray(tags)) user.tags = tags.map((t) => String(t).slice(0, 24)).slice(0, 20);
+  const changes = [];
+  if (status && ['active', 'suspended'].includes(status) && status !== user.status) {
+    user.status = status;
+    changes.push(`estado → ${status === 'active' ? 'activo' : 'suspendido'}`);
+  }
+  if (kycStatus && ['none', 'pending', 'verified'].includes(kycStatus) && kycStatus !== user.kycStatus) {
+    user.kycStatus = kycStatus;
+    changes.push(`KYC → ${kycStatus}`);
+  }
+  if (Array.isArray(tags)) {
+    user.tags = tags.map((t) => String(t).slice(0, 24)).slice(0, 20);
+    changes.push('etiquetas actualizadas');
+  }
   if (resetBalance) {
     user.virtualBalance = STARTING_BALANCE;
     user.holdings = [];
     user.transactions = [];
+    changes.push('saldo reseteado a $10,000');
   }
   saveUser(user);
+  if (changes.length) logAction(req, 'user.update', user, changes.join(' · '));
   res.json(crmUser(user));
 });
 
@@ -740,6 +772,8 @@ app.post('/api/admin/users/import', auth, requirePerm('users.moderate'), (req, r
   });
 
   const { inserted, skipped } = importUsers(docs);
+  if (inserted > 0)
+    logAction(req, 'users.import', null, `${inserted} creados${skipped ? ` · ${skipped} ya existían` : ''}`);
   res.json({ received: rows.length, inserted, skipped, invalid: errors.length, errors: errors.slice(0, 20) });
 });
 
@@ -788,6 +822,7 @@ app.post('/api/admin/users', auth, requirePerm('users.moderate'), (req, res) => 
     survey: null,
   };
   addUser(user);
+  logAction(req, 'user.create', user, 'cliente creado desde el CRM');
   res.status(201).json(crmUser(user));
 });
 
@@ -797,6 +832,7 @@ app.delete('/api/admin/users/:id', auth, requirePerm('users.reset'), (req, res) 
   if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
   if (user.id === req.user.id) return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
   deleteUser(user.id);
+  logAction(req, 'user.delete', user, `eliminó a ${user.email}`);
   res.json({ ok: true });
 });
 
@@ -811,6 +847,7 @@ app.post('/api/admin/users/:id/password', auth, requirePerm('users.reset'), (req
     u.passwordHash = bcrypt.hashSync(newPassword, 10);
   });
   if (r.notFound) return res.status(404).json({ error: 'No encontrado' });
+  logAction(req, 'user.password_reset', target, 'restableció la contraseña');
   res.json({ ok: true });
 });
 
@@ -829,8 +866,10 @@ app.patch('/api/admin/users/:id/role', auth, requirePerm('roles.manage'), (req, 
   const { role } = req.body || {};
   if (!ASSIGNABLE_ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' });
   if (user.id === req.user.id) return res.status(400).json({ error: 'No puedes cambiar tu propio rol' });
+  const prev = user.role;
   user.role = role;
   saveUser(user);
+  logAction(req, 'user.role_change', user, `rol ${prev} → ${role}`);
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
@@ -863,7 +902,31 @@ app.post('/api/admin/staff', auth, requirePerm('roles.manage'), (req, res) => {
     pendingOrders: [],
   };
   addUser(user);
+  logAction(req, 'staff.create', user, `nuevo miembro del equipo (${role})`);
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role, lastActiveAt: user.lastActiveAt });
+});
+
+// Bitácora de auditoría (solo admin: roles.manage).
+app.get('/api/admin/audit', auth, requirePerm('roles.manage'), (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
+  const action = typeof req.query.action === 'string' && req.query.action ? req.query.action : undefined;
+  const { items, total } = listAudit({ limit: pageSize, offset: (page - 1) * pageSize, action });
+  res.json({
+    items: items.map((r) => ({
+      id: r.id,
+      at: r.at,
+      actorId: r.actor_id,
+      actorName: r.actor_name,
+      action: r.action,
+      targetId: r.target_id,
+      targetName: r.target_name,
+      detail: r.detail,
+    })),
+    total,
+    page,
+    pageSize,
+  });
 });
 
 // fallback error handler

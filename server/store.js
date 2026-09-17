@@ -76,6 +76,18 @@ export function load() {
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);
     CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+
+    CREATE TABLE IF NOT EXISTS audit (
+      id           TEXT PRIMARY KEY,
+      at           INTEGER NOT NULL,
+      actor_id     TEXT,
+      actor_name   TEXT,
+      action       TEXT NOT NULL,
+      target_id    TEXT,
+      target_name  TEXT,
+      detail       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at);
   `);
 
   const { count } = stmt('SELECT COUNT(*) AS count FROM users').get();
@@ -151,6 +163,25 @@ export function saveUser(user) {
 
 export function deleteUser(id) {
   stmt('DELETE FROM users WHERE id = ?').run(id);
+}
+
+// ---- audit log (bitácora de acciones del CRM) ----
+export function recordAudit(e) {
+  stmt(
+    'INSERT INTO audit (id, at, actor_id, actor_name, action, target_id, target_name, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(e.id, e.at, e.actorId ?? null, e.actorName ?? null, e.action, e.targetId ?? null, e.targetName ?? null, e.detail ?? null);
+}
+
+// Lista paginada, más recientes primero. Filtros opcionales por acción y actor.
+export function listAudit({ limit = 50, offset = 0, action, actorId } = {}) {
+  const where = [];
+  const params = [];
+  if (action) { where.push('action = ?'); params.push(action); }
+  if (actorId) { where.push('actor_id = ?'); params.push(actorId); }
+  const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const total = stmt(`SELECT COUNT(*) AS c FROM audit ${w}`).get(...params).c;
+  const rows = stmt(`SELECT * FROM audit ${w} ORDER BY at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  return { items: rows, total };
 }
 
 // Atomic read-modify-write for a single user. Runs find → mutate → save inside a

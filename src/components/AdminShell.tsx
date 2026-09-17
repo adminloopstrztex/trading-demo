@@ -55,6 +55,12 @@ export default function AdminShell() {
               Equipo
             </NavLink>
           )}
+          {canManageRoles && (
+            <NavLink to="/admin/audit" className={linkClass}>
+              <Icon d="M13 3H5v18h14V9h-6V3zm0 0l6 6M8 13h8M8 17h8M8 9h3" />
+              Actividad
+            </NavLink>
+          )}
         </nav>
         <div className="mt-auto px-2 pt-4 border-t border-[#1E2128]">
           <div className="text-sm font-medium text-[#F2F3F5]">{user.name}</div>
