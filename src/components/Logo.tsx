@@ -7,7 +7,7 @@ export default function Logo({ size = 28 }: { size?: number }) {
       alt="Stratex"
       draggable={false}
       className="w-auto select-none"
-      style={{ height: Math.round(size * 1.18) }}
+      style={{ height: Math.round(size * 1.55) }}
     />
   );
 }
