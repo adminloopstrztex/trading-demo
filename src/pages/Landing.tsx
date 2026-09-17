@@ -268,7 +268,7 @@ function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, 
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(90deg, rgba(10,11,13,0.96) 0%, rgba(10,11,13,0.86) 42%, rgba(10,11,13,0.62) 66%, rgba(10,11,13,0.82) 100%)',
+              'linear-gradient(90deg, rgba(10,11,13,0.97) 0%, rgba(10,11,13,0.93) 48%, rgba(10,11,13,0.76) 66%, rgba(10,11,13,0.46) 82%, rgba(10,11,13,0.74) 100%)',
           }}
         />
         {/* Vertical blend into the navbar (top) and the ticker tape (bottom). */}
@@ -276,11 +276,11 @@ function Hero({ live }: { live: { candles: OHLC[] | null; stats: Record<string, 
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(10,11,13,0.80) 0%, rgba(10,11,13,0.20) 32%, rgba(10,11,13,0.30) 68%, #0A0B0D 100%)',
+              'linear-gradient(180deg, rgba(10,11,13,0.82) 0%, rgba(10,11,13,0.22) 32%, rgba(10,11,13,0.32) 68%, #0A0B0D 100%)',
           }}
         />
         {/* Soft dark blob to smother the logo baked into the centre of the image. */}
-        <div className="absolute left-[46%] top-1/2 h-[460px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0A0B0D]/90 blur-[70px]" />
+        <div className="absolute left-1/2 top-1/2 h-[540px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0A0B0D]/92 blur-[80px]" />
         {/* Subtle brand glow. */}
         <div className="absolute left-1/2 top-[-12%] h-[520px] w-[880px] -translate-x-1/2 rounded-full bg-[#16C784]/10 blur-[130px]" />
       </div>
