@@ -424,6 +424,20 @@ app.delete('/api/account/orders/:id', auth, (req, res) => {
   res.json({ account: accountSnapshot(r.user) });
 });
 
+// Reinicio de fondos de práctica, iniciado por el propio usuario: vuelve al saldo
+// virtual inicial y limpia posiciones, historial y órdenes pendientes. Es una
+// acción self-service (nunca un admin acreditando saldo) y solo afecta su cuenta.
+app.post('/api/account/reset', auth, (req, res) => {
+  const r = updateUser(req.user.id, (user) => {
+    user.virtualBalance = STARTING_BALANCE;
+    user.holdings = [];
+    user.transactions = [];
+    user.pendingOrders = [];
+  });
+  if (r.notFound) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ account: accountSnapshot(r.user) });
+});
+
 // Called by the client's price watcher when a pending order's trigger condition
 // is met. The server re-validates: for live symbols it re-checks against the real
 // price, and executes at the authoritative price. Prevents fake-price fills.
@@ -834,6 +848,18 @@ app.delete('/api/admin/users/:id', auth, requirePerm('users.reset'), (req, res) 
   deleteUser(user.id);
   logAction(req, 'user.delete', user, `eliminó a ${user.email}`);
   res.json({ ok: true });
+});
+
+// Limpieza única de los usuarios semilla de demostración (correos @example.com).
+// Diseñada para ser segura: solo borra clientes de prueba (role 'user' con email
+// @example.com). Nunca toca al admin, al staff ni a usuarios reales registrados.
+app.post('/api/admin/users/purge-demo', auth, requirePerm('users.reset'), (req, res) => {
+  const demo = getDb().users.filter(
+    (u) => u.role === 'user' && /@example\.com$/i.test(u.email || '')
+  );
+  for (const u of demo) deleteUser(u.id);
+  logAction(req, 'users.purge_demo', null, `eliminó ${demo.length} usuario(s) demo (@example.com)`);
+  res.json({ ok: true, deleted: demo.length });
 });
 
 // Restablecer la contraseña de un cliente (admin → permiso users.reset).

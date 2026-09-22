@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMarketStore } from '../store/marketStore';
 import { useAccountStore } from '../store/accountStore';
@@ -7,6 +7,7 @@ import TradingChart from '../components/TradingChart';
 import AssetLogo from '../components/AssetLogo';
 import WelcomeBanner from '../components/WelcomeBanner';
 import { useCountUp } from '../hooks/useCountUp';
+import { toast } from '../store/toastStore';
 
 export default function Portfolio() {
   const assets = useMarketStore((s) => s.assets);
@@ -119,6 +120,64 @@ export default function Portfolio() {
           </div>
         )}
       </div>
+
+      <ResetFundsSection />
+    </div>
+  );
+}
+
+function ResetFundsSection() {
+  const resetFunds = useAccountStore((s) => s.resetFunds);
+  const { clearEquity } = useHistoryStore();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function handleReset() {
+    setBusy(true);
+    const res = await resetFunds();
+    setBusy(false);
+    setConfirming(false);
+    if (res.ok) {
+      clearEquity?.();
+      toast.success('Fondos reiniciados', 'Tu cuenta de práctica volvió a $10,000 virtuales.');
+    } else {
+      toast.error('No se pudo reiniciar', res.error || 'Inténtalo de nuevo.');
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#1E2128] bg-[#101216] p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div className="text-sm font-medium text-[#F2F3F5]">Reiniciar mis fondos de práctica</div>
+        <div className="text-xs text-[#8B92A0]">
+          Vuelve a $10,000 virtuales y borra tus posiciones, historial y órdenes. Es saldo de práctica, sin valor real.
+        </div>
+      </div>
+      {confirming ? (
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleReset}
+            disabled={busy}
+            className="rounded-xl bg-[#FF5C5C] px-4 py-2 text-sm font-semibold text-[#0A0B0D] transition hover:bg-[#e64f4f] disabled:opacity-50"
+          >
+            {busy ? 'Reiniciando…' : 'Sí, reiniciar'}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            disabled={busy}
+            className="rounded-xl border border-[#262A33] px-4 py-2 text-sm font-medium text-[#B8BFCC] transition hover:text-[#F2F3F5]"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className="shrink-0 rounded-xl border border-[#262A33] px-4 py-2 text-sm font-medium text-[#B8BFCC] transition hover:border-[#3a404b] hover:text-[#F2F3F5]"
+        >
+          Reiniciar mis fondos
+        </button>
+      )}
     </div>
   );
 }

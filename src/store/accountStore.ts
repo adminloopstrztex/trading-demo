@@ -63,6 +63,7 @@ interface AccountState {
   ) => Promise<Result>;
   cancelOrder: (id: string) => Promise<void>;
   executeOrder: (id: string, price: number) => Promise<void>;
+  resetFunds: () => Promise<Result>;
 }
 
 function applySnapshot(user: AuthUser, snap: AccountSnapshot) {
@@ -181,6 +182,16 @@ export const useAccountStore = create<AccountState>((set) => ({
       if (data.account) set(setSnapshot(data.account));
     } catch {
       // 409 (condition not yet met) or transient error: leave the order pending
+    }
+  },
+
+  resetFunds: async () => {
+    try {
+      const data = await api<{ account: AccountSnapshot }>('/account/reset', { method: 'POST' });
+      set(setSnapshot(data.account));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
     }
   },
 }));

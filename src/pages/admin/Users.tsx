@@ -143,6 +143,29 @@ export default function AdminUsers() {
   const [showAdd, setShowAdd] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const canModerate = useAccountStore((s) => s.user?.permissions ?? []).includes('users.moderate');
+  const canReset = useAccountStore((s) => s.user?.permissions ?? []).includes('users.reset');
+  const [purging, setPurging] = useState(false);
+
+  async function handlePurgeDemo() {
+    if (
+      !window.confirm(
+        '¿Eliminar los usuarios demo de prueba (correos @example.com)?\n\n' +
+          'No se puede deshacer. No afecta al admin, al staff ni a usuarios reales registrados.'
+      )
+    )
+      return;
+    setPurging(true);
+    try {
+      const res = await api<{ deleted: number }>('/admin/users/purge-demo', { method: 'POST' });
+      if (res.deleted > 0) toast.success('Usuarios demo eliminados', `${res.deleted} cuenta(s) de prueba borradas.`);
+      else toast.info('Nada que limpiar', 'No quedan usuarios demo (@example.com).');
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      toast.error('No se pudo limpiar', (e as Error).message);
+    } finally {
+      setPurging(false);
+    }
+  }
 
   async function handleImportFile(file: File) {
     setImporting(true);
@@ -284,6 +307,16 @@ export default function AdminUsers() {
               className="text-xs font-semibold rounded-lg bg-[#3B82F6] hover:bg-[#2f6fd6] text-white px-3 py-1.5"
             >
               + Añadir usuario
+            </button>
+          )}
+          {canReset && (
+            <button
+              onClick={handlePurgeDemo}
+              disabled={purging}
+              title="Elimina los usuarios de prueba con correo @example.com"
+              className="text-xs font-medium rounded-lg border border-[#FF5C5C]/40 text-[#FF5C5C] hover:bg-[#FF5C5C]/10 px-3 py-1.5 disabled:opacity-40"
+            >
+              {purging ? 'Limpiando…' : 'Limpiar usuarios demo'}
             </button>
           )}
           <button

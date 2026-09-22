@@ -8,6 +8,7 @@ interface Point {
 interface HistoryState {
   equityHistory: Point[];
   pushEquity: (value: number) => void;
+  clearEquity: () => void;
 }
 
 export const useHistoryStore = create<HistoryState>((set) => ({
@@ -20,4 +21,5 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const equityHistory = [...state.equityHistory, { time, value }].slice(-180);
       return { equityHistory };
     }),
+  clearEquity: () => set({ equityHistory: [] }),
 }));
