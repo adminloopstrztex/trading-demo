@@ -962,8 +962,56 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Error interno' });
 });
 
+// Recuperación / bootstrap de administrador. Si se definen ADMIN_EMAIL y
+// ADMIN_PASSWORD por entorno (algo que solo el dueño del proyecto puede hacer en
+// Railway), al arrancar se asegura que exista un admin con esas credenciales:
+// si el correo ya existe, se le restablece la contraseña y el rol admin; si no,
+// se crea. Sirve para recuperar el acceso cuando se olvidan las credenciales.
+// No expone nada públicamente: depende de variables de entorno privadas.
+function bootstrapAdmin() {
+  const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!email || !password) return;
+  if (!EMAIL_RE.test(email)) {
+    console.warn('[Stratex] ADMIN_EMAIL inválido; se omite el bootstrap de admin.');
+    return;
+  }
+  if (password.length < 6) {
+    console.warn('[Stratex] ADMIN_PASSWORD demasiado corta (mín. 6); se omite el bootstrap.');
+    return;
+  }
+  const existing = findUserByEmail(email);
+  if (existing) {
+    updateUser(existing.id, (u) => {
+      u.passwordHash = bcrypt.hashSync(password, 10);
+      u.role = 'admin';
+      u.status = 'active';
+    });
+    console.warn(`[Stratex] Admin bootstrap: contraseña restablecida y rol admin asegurado para ${email}.`);
+  } else {
+    addUser({
+      id: randomUUID(),
+      name: 'Administrador',
+      email,
+      passwordHash: bcrypt.hashSync(password, 10),
+      role: 'admin',
+      status: 'active',
+      kycStatus: 'verified',
+      createdAt: Date.now(),
+      lastActiveAt: Date.now(),
+      virtualBalance: STARTING_BALANCE,
+      holdings: [],
+      transactions: [],
+      tags: [],
+      notes: [],
+    });
+    console.warn(`[Stratex] Admin bootstrap: creado nuevo admin ${email}.`);
+  }
+}
+
 // Only start the HTTP listener when run as a real server, not when imported by tests.
 if (process.env.NODE_ENV !== 'test') {
+  bootstrapAdmin();
   app.listen(PORT, () => {
     console.log(`Stratex API en http://localhost:${PORT}`);
   });
