@@ -862,6 +862,16 @@ app.post('/api/admin/users/purge-demo', auth, requirePerm('users.reset'), (req, 
   res.json({ ok: true, deleted: demo.length });
 });
 
+// Vaciado total de usuarios para dejar un entorno limpio de pruebas. Elimina a
+// TODOS los usuarios EXCEPTO la propia cuenta admin que ejecuta la acción (para
+// no perder el acceso al CRM). Requiere el permiso más alto (roles.manage).
+app.post('/api/admin/users/purge-all', auth, requirePerm('roles.manage'), (req, res) => {
+  const others = getDb().users.filter((u) => u.id !== req.user.id);
+  for (const u of others) deleteUser(u.id);
+  logAction(req, 'users.purge_all', null, `vació ${others.length} usuario(s), conservando su propia cuenta admin`);
+  res.json({ ok: true, deleted: others.length });
+});
+
 // Restablecer la contraseña de un cliente (admin → permiso users.reset).
 app.post('/api/admin/users/:id/password', auth, requirePerm('users.reset'), (req, res) => {
   const { newPassword } = req.body || {};

@@ -144,7 +144,27 @@ export default function AdminUsers() {
   const fileRef = useRef<HTMLInputElement>(null);
   const canModerate = useAccountStore((s) => s.user?.permissions ?? []).includes('users.moderate');
   const canReset = useAccountStore((s) => s.user?.permissions ?? []).includes('users.reset');
+  const canManageRoles = useAccountStore((s) => s.user?.permissions ?? []).includes('roles.manage');
   const [purging, setPurging] = useState(false);
+  const [purgingAll, setPurgingAll] = useState(false);
+
+  async function handlePurgeAll() {
+    const answer = window.prompt(
+      'ATENCIÓN: esto eliminará TODOS los usuarios (clientes y staff), dejando solo tu cuenta admin. ' +
+        'No se puede deshacer.\n\nEscribe ELIMINAR TODO para confirmar:'
+    );
+    if (answer !== 'ELIMINAR TODO') return;
+    setPurgingAll(true);
+    try {
+      const res = await api<{ deleted: number }>('/admin/users/purge-all', { method: 'POST' });
+      toast.success('Entorno vaciado', `${res.deleted} usuario(s) eliminados. Solo queda tu cuenta admin.`);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      toast.error('No se pudo vaciar', (e as Error).message);
+    } finally {
+      setPurgingAll(false);
+    }
+  }
 
   async function handlePurgeDemo() {
     if (
@@ -317,6 +337,16 @@ export default function AdminUsers() {
               className="text-xs font-medium rounded-lg border border-[#FF5C5C]/40 text-[#FF5C5C] hover:bg-[#FF5C5C]/10 px-3 py-1.5 disabled:opacity-40"
             >
               {purging ? 'Limpiando…' : 'Limpiar usuarios demo'}
+            </button>
+          )}
+          {canManageRoles && (
+            <button
+              onClick={handlePurgeAll}
+              disabled={purgingAll}
+              title="Elimina TODOS los usuarios excepto tu cuenta admin"
+              className="text-xs font-semibold rounded-lg border border-[#FF5C5C] bg-[#FF5C5C]/10 text-[#FF5C5C] hover:bg-[#FF5C5C]/20 px-3 py-1.5 disabled:opacity-40"
+            >
+              {purgingAll ? 'Vaciando…' : 'Vaciar todos'}
             </button>
           )}
           <button
