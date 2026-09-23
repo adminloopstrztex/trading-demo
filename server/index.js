@@ -631,14 +631,20 @@ app.get('/api/admin/timeseries', auth, requirePerm('crm.view'), (req, res) => {
 });
 
 app.get('/api/admin/users', auth, requirePerm('crm.view'), (req, res) => {
-  const { q, status, kyc, segment, sort, experience, goal } = req.query;
+  const { q, status, kyc, segment, sort, experience, goal, tag } = req.query;
   let users = getDb().users.filter((u) => u.role === 'user');
   if (q) {
     const term = String(q).toLowerCase();
-    users = users.filter((u) => u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term));
+    users = users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(term) ||
+        u.email.toLowerCase().includes(term) ||
+        (u.phone || '').toLowerCase().includes(term)
+    );
   }
   if (status) users = users.filter((u) => u.status === status);
   if (kyc) users = users.filter((u) => u.kycStatus === kyc);
+  if (tag) users = users.filter((u) => (u.tags || []).includes(String(tag)));
   if (segment === 'lead') users = users.filter((u) => u.transactions.length === 0);
   if (segment === 'active') users = users.filter((u) => u.transactions.length > 0);
   if (experience) users = users.filter((u) => experienceLevel(u.survey?.tradingExperience) === experience);

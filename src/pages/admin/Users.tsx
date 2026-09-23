@@ -28,7 +28,7 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-type ColKey = 'status' | 'kyc' | 'equity' | 'invested' | 'trades' | 'created' | 'lastActive';
+type ColKey = 'phone' | 'email' | 'status' | 'kyc' | 'equity' | 'invested' | 'trades' | 'created' | 'lastActive';
 
 interface Column {
   key: ColKey;
@@ -39,6 +39,34 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
+  {
+    key: 'email',
+    label: 'Correo',
+    width: 'minmax(160px,1.4fr)',
+    render: (u) => (
+      <a
+        href={`mailto:${u.email}`}
+        className="block truncate text-[#B8BFCC] hover:text-[#60A5FA]"
+        title={u.email}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {u.email}
+      </a>
+    ),
+  },
+  {
+    key: 'phone',
+    label: 'Teléfono',
+    width: '150px',
+    render: (u) =>
+      u.phone ? (
+        <span className="tabular-nums text-[#B8BFCC] whitespace-nowrap" title={u.phone}>
+          {u.phone}
+        </span>
+      ) : (
+        <span className="text-[#5B6472]">—</span>
+      ),
+  },
   { key: 'status', label: 'Estado', width: '118px', render: (u) => <StatusBadge status={u.status} /> },
   { key: 'kyc', label: 'KYC', width: '128px', render: (u) => <KycBadge kyc={u.kycStatus} /> },
   {
@@ -78,7 +106,7 @@ const COLUMNS: Column[] = [
   },
 ];
 
-const DEFAULT_VISIBLE: ColKey[] = ['status', 'kyc', 'equity', 'trades', 'lastActive'];
+const DEFAULT_VISIBLE: ColKey[] = ['email', 'phone', 'status', 'kyc', 'equity', 'trades', 'lastActive'];
 const PAGE_SIZES = [10, 25, 50];
 
 function csvCell(v: unknown) {
@@ -132,6 +160,8 @@ export default function AdminUsers() {
   const [segment, setSegment] = useState('');
   const [experience, setExperience] = useState('');
   const [goal, setGoal] = useState('');
+  const [tag, setTag] = useState('');
+  const [tags, setTags] = useState<{ tag: string; count: number }[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [visible, setVisible] = useState<Set<ColKey>>(new Set(DEFAULT_VISIBLE));
@@ -219,7 +249,19 @@ export default function AdminUsers() {
     }
   }
 
-  useEffect(() => setPage(1), [q, status, kyc, segment, experience, goal, pageSize]);
+  useEffect(() => setPage(1), [q, status, kyc, segment, experience, goal, tag, pageSize]);
+
+  // Etiquetas disponibles para el filtro superior (se recargan al cambiar datos).
+  useEffect(() => {
+    api<{ tag: string; count: number }[]>('/admin/tags')
+      .then(setTags)
+      .catch(() => setTags([]));
+  }, [reloadKey]);
+
+  // Si la etiqueta seleccionada deja de existir (p. ej. tras vaciar), se limpia.
+  useEffect(() => {
+    if (tag && !tags.some((t) => t.tag === tag)) setTag('');
+  }, [tags, tag]);
 
   function buildParams(extra?: Record<string, string>) {
     const p = new URLSearchParams();
@@ -229,6 +271,7 @@ export default function AdminUsers() {
     if (segment) p.set('segment', segment);
     if (experience) p.set('experience', experience);
     if (goal) p.set('goal', goal);
+    if (tag) p.set('tag', tag);
     for (const k in extra) p.set(k, extra[k]);
     return p;
   }
@@ -243,7 +286,7 @@ export default function AdminUsers() {
     }, 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, kyc, segment, experience, goal, page, pageSize, reloadKey]);
+  }, [q, status, kyc, segment, experience, goal, tag, page, pageSize, reloadKey]);
 
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -393,6 +436,37 @@ export default function AdminUsers() {
         </div>
       </header>
 
+      {/* Tag filter row: quick chips to filter users by the tags the team created. */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-[#5B6472]">Etiquetas:</span>
+          <button
+            onClick={() => setTag('')}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              tag === ''
+                ? 'border-[#3B82F6] bg-[#3B82F6]/15 text-[#60A5FA]'
+                : 'border-[#262A33] text-[#8B92A0] hover:text-[#F2F3F5]'
+            }`}
+          >
+            Todas
+          </button>
+          {tags.map(({ tag: t, count }) => (
+            <button
+              key={t}
+              onClick={() => setTag((cur) => (cur === t ? '' : t))}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                tag === t
+                  ? 'border-[#3B82F6] bg-[#3B82F6]/15 text-[#60A5FA]'
+                  : 'border-[#262A33] text-[#B8BFCC] hover:text-[#F2F3F5]'
+              }`}
+            >
+              {t}
+              <span className="tabular-nums text-[10px] text-[#5B6472]">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Top filters (segment sits above the grid; per-column filters live in the header row) */}
       <div className="flex flex-wrap gap-2">
         <Select label="Segmento" value={segment} onChange={setSegment} options={[['', 'Segmento: todos'], ['active', 'Han operado'], ['lead', 'Leads']]} />
@@ -432,7 +506,7 @@ export default function AdminUsers() {
       )}
 
       <div className="bg-[#101216] border border-[#1E2128] rounded-2xl overflow-x-auto">
-        <div className="min-w-[720px]">
+        <div className="min-w-[960px]">
           {/* header */}
           <div
             className="grid gap-3 px-4 py-2.5 text-[11px] uppercase tracking-wide text-[#5B6472] border-b border-[#1E2128] items-center"
@@ -462,8 +536,8 @@ export default function AdminUsers() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Filtrar nombre / email…"
-              aria-label="Filtrar por nombre o email"
+              placeholder="Filtrar nombre, email o teléfono…"
+              aria-label="Filtrar por nombre, email o teléfono"
               className="w-full rounded-lg border border-[#1E2128] bg-[#0A0B0D] px-2.5 py-1.5 text-xs text-[#F2F3F5] placeholder:text-[#5B6472] outline-none focus-visible:border-[#3B82F6]"
             />
             {cols.map((c) => (
@@ -523,7 +597,9 @@ export default function AdminUsers() {
                       >
                         {u.name}
                       </Link>
-                      {!dense && <div className="text-xs text-[#8B92A0] truncate">{u.email}</div>}
+                      {!dense && !visible.has('email') && (
+                        <div className="text-xs text-[#8B92A0] truncate">{u.email}</div>
+                      )}
                     </div>
                   </div>
                   {cols.map((c) => (
