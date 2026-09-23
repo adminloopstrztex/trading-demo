@@ -90,13 +90,21 @@ const PHONE_RE = /^\+?[0-9\s\-()]{7,20}$/;
 
 // Role-based access control for the back-office team.
 //  admin   – full control, can manage roles
-//  support – manage customers (moderate status/KYC, notes) but not reset or roles
-//  viewer  – read-only access to the CRM
+//  support – manage customers (moderate status/KYC, notes) but not reset/delete or roles
+//  viewer  – analista: ve el CRM, deja notas y resetea el saldo demo (virtual) de
+//            un cliente; NO puede borrar clientes, cambiar contraseñas ni moderar.
 //  user    – end customer (trader), no CRM access
+//
+// Permisos finos:
+//  users.moderate     – cambiar estado/KYC/etiquetas
+//  users.notes        – añadir notas a un cliente
+//  users.resetBalance – reiniciar el saldo demo (virtual) de un cliente
+//  users.reset        – acciones destructivas: borrar cliente, resetear contraseña, purgas
+//  roles.manage       – gestionar el equipo y sus roles
 const ROLE_PERMS = {
-  admin: ['crm.view', 'users.moderate', 'users.reset', 'roles.manage'],
-  support: ['crm.view', 'users.moderate'],
-  viewer: ['crm.view'],
+  admin: ['crm.view', 'users.moderate', 'users.notes', 'users.resetBalance', 'users.reset', 'roles.manage'],
+  support: ['crm.view', 'users.moderate', 'users.notes'],
+  viewer: ['crm.view', 'users.notes', 'users.resetBalance'],
   user: [],
 };
 const STAFF_ROLES = ['admin', 'support', 'viewer'];
@@ -670,9 +678,7 @@ app.get('/api/admin/users/:id', auth, requirePerm('crm.view'), (req, res) => {
 app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res) => {
   const user = findUserById(req.params.id);
   if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
-  const { status, kycStatus, tags, resetBalance } = req.body || {};
-  if (resetBalance && !hasPerm(req.user, 'users.reset'))
-    return res.status(403).json({ error: 'No tienes permiso para resetear saldos' });
+  const { status, kycStatus, tags } = req.body || {};
   const changes = [];
   if (status && ['active', 'suspended'].includes(status) && status !== user.status) {
     user.status = status;
@@ -686,15 +692,25 @@ app.patch('/api/admin/users/:id', auth, requirePerm('users.moderate'), (req, res
     user.tags = tags.map((t) => String(t).slice(0, 24)).slice(0, 20);
     changes.push('etiquetas actualizadas');
   }
-  if (resetBalance) {
-    user.virtualBalance = STARTING_BALANCE;
-    user.holdings = [];
-    user.transactions = [];
-    changes.push('saldo reseteado a $10,000');
-  }
   saveUser(user);
   if (changes.length) logAction(req, 'user.update', user, changes.join(' · '));
   res.json(crmUser(user));
+});
+
+// Reiniciar el saldo demo (virtual) de un cliente al inicial. Permiso fino
+// users.resetBalance (admin y analista). No borra la cuenta ni toca credenciales.
+app.post('/api/admin/users/:id/reset-balance', auth, requirePerm('users.resetBalance'), (req, res) => {
+  const target = findUserById(req.params.id);
+  if (!target || target.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
+  const r = updateUser(target.id, (u) => {
+    u.virtualBalance = STARTING_BALANCE;
+    u.holdings = [];
+    u.transactions = [];
+    u.pendingOrders = [];
+  });
+  if (r.notFound) return res.status(404).json({ error: 'No encontrado' });
+  logAction(req, 'user.reset_balance', target, 'reinició el saldo demo a $10,000');
+  res.json(crmUser(r.user));
 });
 
 // ---- etiquetas de cliente (cualquier miembro del CRM: crm.view) ----
@@ -797,7 +813,7 @@ app.post('/api/admin/users/import', auth, requirePerm('users.moderate'), (req, r
   res.json({ received: rows.length, inserted, skipped, invalid: errors.length, errors: errors.slice(0, 20) });
 });
 
-app.post('/api/admin/users/:id/notes', auth, requirePerm('users.moderate'), (req, res) => {
+app.post('/api/admin/users/:id/notes', auth, requirePerm('users.notes'), (req, res) => {
   const user = findUserById(req.params.id);
   if (!user || user.role !== 'user') return res.status(404).json({ error: 'No encontrado' });
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';

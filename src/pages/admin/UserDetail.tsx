@@ -13,6 +13,8 @@ export default function AdminUserDetail() {
   const navigate = useNavigate();
   const perms = useAccountStore((s) => s.user?.permissions ?? []);
   const canModerate = perms.includes('users.moderate');
+  const canNotes = perms.includes('users.notes');
+  const canResetBalance = perms.includes('users.resetBalance');
   const canReset = perms.includes('users.reset');
   const canManageRoles = perms.includes('roles.manage');
   const [u, setU] = useState<CrmUserDetail | null>(null);
@@ -48,6 +50,20 @@ export default function AdminUserDetail() {
     });
     setNoteText('');
     setU((prev) => (prev ? { ...prev, notes: [note, ...prev.notes] } : prev));
+  }
+
+  async function resetBalance() {
+    if (!confirm('¿Resetear el saldo demo (virtual) de este usuario a $10,000 y borrar sus posiciones?')) return;
+    setBusy(true);
+    try {
+      await api(`/admin/users/${id}/reset-balance`, { method: 'POST' });
+      reload();
+      toast.success('Saldo reiniciado', `${u?.name} vuelve a $10,000 virtuales.`);
+    } catch (e) {
+      toast.error('No se pudo reiniciar', (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function resetPassword() {
@@ -224,7 +240,7 @@ export default function AdminUserDetail() {
           </Card>
 
           <Card title="Notas internas">
-            {canModerate && (
+            {canNotes && (
               <div className="flex gap-2 mb-3">
                 <input
                   value={noteText}
@@ -259,39 +275,37 @@ export default function AdminUserDetail() {
         </div>
 
         <div className="space-y-5">
-          {canModerate && (
-          <Card title="Acciones de administrador">
+          {(canModerate || canResetBalance || canReset) && (
+          <Card title="Acciones">
             <div className="space-y-4 text-sm">
-              <Control label="Estado de la cuenta">
-                <ActionBtn active={u.status === 'active'} disabled={busy} onClick={() => patch({ status: 'active' })}>
-                  Activa
-                </ActionBtn>
-                <ActionBtn danger active={u.status === 'suspended'} disabled={busy} onClick={() => patch({ status: 'suspended' })}>
-                  Suspender
-                </ActionBtn>
-              </Control>
+              {canModerate && (
+                <Control label="Estado de la cuenta">
+                  <ActionBtn active={u.status === 'active'} disabled={busy} onClick={() => patch({ status: 'active' })}>
+                    Activa
+                  </ActionBtn>
+                  <ActionBtn danger active={u.status === 'suspended'} disabled={busy} onClick={() => patch({ status: 'suspended' })}>
+                    Suspender
+                  </ActionBtn>
+                </Control>
+              )}
 
-              <Control label="Verificación KYC">
-                <ActionBtn active={u.kycStatus === 'verified'} disabled={busy} onClick={() => patch({ kycStatus: 'verified' })}>
-                  Verificar
-                </ActionBtn>
-                <ActionBtn active={u.kycStatus === 'pending'} disabled={busy} onClick={() => patch({ kycStatus: 'pending' })}>
-                  Pendiente
-                </ActionBtn>
-                <ActionBtn active={u.kycStatus === 'none'} disabled={busy} onClick={() => patch({ kycStatus: 'none' })}>
-                  Ninguno
-                </ActionBtn>
-              </Control>
+              {canModerate && (
+                <Control label="Verificación KYC">
+                  <ActionBtn active={u.kycStatus === 'verified'} disabled={busy} onClick={() => patch({ kycStatus: 'verified' })}>
+                    Verificar
+                  </ActionBtn>
+                  <ActionBtn active={u.kycStatus === 'pending'} disabled={busy} onClick={() => patch({ kycStatus: 'pending' })}>
+                    Pendiente
+                  </ActionBtn>
+                  <ActionBtn active={u.kycStatus === 'none'} disabled={busy} onClick={() => patch({ kycStatus: 'none' })}>
+                    Ninguno
+                  </ActionBtn>
+                </Control>
+              )}
 
-              {canReset && (
+              {canResetBalance && (
                 <Control label="Saldo demo">
-                  <ActionBtn
-                    disabled={busy}
-                    onClick={() => {
-                      if (confirm('¿Resetear el saldo virtual de este usuario a $10,000 y borrar sus posiciones?'))
-                        patch({ resetBalance: true });
-                    }}
-                  >
+                  <ActionBtn disabled={busy} onClick={resetBalance}>
                     Resetear a $10,000
                   </ActionBtn>
                 </Control>

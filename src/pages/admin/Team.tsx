@@ -20,8 +20,10 @@ const ROLE_OPTIONS: { value: StaffMember['role']; label: string }[] = [
 
 const ROLE_MATRIX = [
   { perm: 'Ver el CRM (dashboard, usuarios, leads)', admin: true, support: true, viewer: true },
-  { perm: 'Moderar clientes (estado, KYC, notas)', admin: true, support: true, viewer: false },
-  { perm: 'Resetear saldo demo de un cliente', admin: true, support: false, viewer: false },
+  { perm: 'Dejar notas en un cliente', admin: true, support: true, viewer: true },
+  { perm: 'Moderar clientes (estado, KYC)', admin: true, support: true, viewer: false },
+  { perm: 'Resetear saldo demo de un cliente', admin: true, support: false, viewer: true },
+  { perm: 'Eliminar cliente / restablecer contraseña', admin: true, support: false, viewer: false },
   { perm: 'Gestionar roles del equipo', admin: true, support: false, viewer: false },
 ];
 
