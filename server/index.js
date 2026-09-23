@@ -316,8 +316,11 @@ app.get('/api/auth/me', auth, (req, res) => {
   res.json({ user: publicUser(req.user), account: accountSnapshot(req.user) });
 });
 
-// Cambiar la propia contraseña (cualquier usuario autenticado).
+// Cambiar la propia contraseña. Restringido al admin: en el back-office solo el
+// administrador gestiona contraseñas (las suyas y, vía reset, las de los demás).
 app.post('/api/auth/password', authLimiter, auth, (req, res) => {
+  if (req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Solo el administrador puede cambiar contraseñas' });
   const { currentPassword, newPassword } = req.body || {};
   if (typeof currentPassword !== 'string' || typeof newPassword !== 'string')
     return res.status(400).json({ error: 'Datos inválidos' });

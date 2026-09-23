@@ -73,9 +73,11 @@ export default function AdminShell() {
             <button onClick={() => setEmailOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
               Correo
             </button>
-            <button onClick={() => setPwOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
-              Contraseña
-            </button>
+            {user.role === 'admin' && (
+              <button onClick={() => setPwOpen(true)} className="text-[#8B92A0] hover:text-[#F2F3F5]">
+                Contraseña
+              </button>
+            )}
             <button onClick={logout} className="text-[#8B92A0] hover:text-[#FF5C5C]">
               Salir
             </button>
