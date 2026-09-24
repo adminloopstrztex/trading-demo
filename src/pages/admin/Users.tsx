@@ -42,7 +42,7 @@ const COLUMNS: Column[] = [
   {
     key: 'email',
     label: 'Correo',
-    width: 'minmax(160px,1.4fr)',
+    width: 'minmax(150px,1.6fr)',
     render: (u) => (
       <a
         href={`mailto:${u.email}`}
@@ -57,56 +57,56 @@ const COLUMNS: Column[] = [
   {
     key: 'phone',
     label: 'Teléfono',
-    width: '150px',
+    width: 'minmax(120px,0.9fr)',
     render: (u) =>
       u.phone ? (
-        <span className="tabular-nums text-[#B8BFCC] whitespace-nowrap" title={u.phone}>
+        <span className="tabular-nums text-[#B8BFCC] truncate block" title={u.phone}>
           {u.phone}
         </span>
       ) : (
         <span className="text-[#5B6472]">—</span>
       ),
   },
-  { key: 'status', label: 'Estado', width: '118px', render: (u) => <StatusBadge status={u.status} /> },
-  { key: 'kyc', label: 'KYC', width: '128px', render: (u) => <KycBadge kyc={u.kycStatus} /> },
+  { key: 'status', label: 'Estado', width: '102px', render: (u) => <StatusBadge status={u.status} /> },
+  { key: 'kyc', label: 'KYC', width: '98px', render: (u) => <KycBadge kyc={u.kycStatus} /> },
   {
     key: 'equity',
     label: 'Equity',
-    width: '116px',
+    width: '104px',
     align: 'right',
     render: (u) => <span className="tabular-nums text-[#F2F3F5]">{fmtMoney(u.virtualBalance + u.invested)}</span>,
   },
   {
     key: 'invested',
     label: 'Invertido',
-    width: '116px',
+    width: '104px',
     align: 'right',
     render: (u) => <span className="tabular-nums text-[#B8BFCC]">{fmtMoney(u.invested)}</span>,
   },
   {
     key: 'trades',
-    label: 'Operaciones',
-    width: '108px',
+    label: 'Oper.',
+    width: '78px',
     align: 'right',
     render: (u) => <span className="tabular-nums text-[#B8BFCC]">{u.tradesCount}</span>,
   },
   {
     key: 'created',
     label: 'Registrado',
-    width: '128px',
+    width: '108px',
     align: 'right',
     render: (u) => <span className="text-[#8B92A0]">{timeAgo(u.createdAt)}</span>,
   },
   {
     key: 'lastActive',
     label: 'Última act.',
-    width: '116px',
+    width: '104px',
     align: 'right',
     render: (u) => <span className="text-[#8B92A0]">{timeAgo(u.lastActiveAt)}</span>,
   },
 ];
 
-const DEFAULT_VISIBLE: ColKey[] = ['email', 'phone', 'status', 'kyc', 'equity', 'trades', 'lastActive'];
+const DEFAULT_VISIBLE: ColKey[] = ['email', 'phone', 'status', 'kyc', 'equity', 'lastActive'];
 const PAGE_SIZES = [10, 25, 50];
 
 function csvCell(v: unknown) {
@@ -293,7 +293,7 @@ export default function AdminUsers() {
   const rows = data?.items ?? [];
   const loading = data === null;
   const cols = COLUMNS.filter((c) => visible.has(c.key));
-  const gridCols = `36px minmax(200px,2fr) ${cols.map((c) => c.width).join(' ')}`;
+  const gridCols = `34px minmax(140px,1.5fr) ${cols.map((c) => c.width).join(' ')}`;
 
   const pageIds = rows.map((r) => r.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
@@ -506,7 +506,7 @@ export default function AdminUsers() {
       )}
 
       <div className="bg-[#101216] border border-[#1E2128] rounded-2xl overflow-x-auto">
-        <div className="min-w-[960px]">
+        <div className="min-w-[820px]">
           {/* header */}
           <div
             className="grid gap-3 px-4 py-2.5 text-[11px] uppercase tracking-wide text-[#5B6472] border-b border-[#1E2128] items-center"
